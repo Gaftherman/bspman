@@ -479,6 +479,43 @@ bool ScriptManager::init(Renderer* renderer) {
     return true;
 }
 
+bool ScriptManager::initCLI(Bsp* map) {
+    app = nullptr;
+    cliMap = map;
+    isBatchMode = false;
+
+    engine = asCreateScriptEngine();
+    if (!engine) {
+        logf("Failed to create AngelScript engine\n");
+        return false;
+    }
+
+    engine->SetMessageCallback(asFUNCTION(messageCallback), nullptr, asCALL_CDECL);
+
+    RegisterStdString(engine);
+    RegisterScriptArray(engine, true);
+    RegisterScriptMath(engine);
+    RegisterExceptionRoutines(engine);
+
+    registerTypes();
+    registerEntityMethods();
+    registerGlobalFunctions();
+
+    context = engine->CreateContext();
+    if (!context) {
+        logf("Failed to create AngelScript context\n");
+        return false;
+    }
+
+    return true;
+}
+
+Bsp* ScriptManager::getCurrentMap() const {
+    if (cliMap) return cliMap;
+    if (app && app->mapRenderer) return app->mapRenderer->map;
+    return nullptr;
+}
+
 void ScriptManager::shutdown() {
     clearEntityCache();
     
@@ -1242,9 +1279,9 @@ void ScriptManager::clearEntityCache() {
 }
 
 ScriptEntity* ScriptManager::getEntity(int index) {
-    if (!app || !app->mapRenderer || !app->mapRenderer->map) return nullptr;
-    
-    Bsp* map = app->mapRenderer->map;
+    Bsp* map = getCurrentMap();
+    if (!map) return nullptr;
+
     if (index < 0 || index >= (int)map->ents.size()) return nullptr;
     
     // Check cache
@@ -1262,14 +1299,16 @@ ScriptEntity* ScriptManager::getEntity(int index) {
 }
 
 int ScriptManager::getEntityCount() {
-    if (!app || !app->mapRenderer || !app->mapRenderer->map) return 0;
-    return (int)app->mapRenderer->map->ents.size();
+    Bsp* map = getCurrentMap();
+    if (!map) return 0;
+
+    return (int)map->ents.size();
 }
 
 ScriptEntity* ScriptManager::getEntityByTargetname(const std::string& targetname) {
-    if (!app || !app->mapRenderer || !app->mapRenderer->map) return nullptr;
+    Bsp* map = getCurrentMap();
+    if (!map) return nullptr;
     
-    Bsp* map = app->mapRenderer->map;
     for (int i = 0; i < (int)map->ents.size(); i++) {
         if (map->ents[i]->getTargetname() == targetname) {
             return getEntity(i);
@@ -1279,9 +1318,9 @@ ScriptEntity* ScriptManager::getEntityByTargetname(const std::string& targetname
 }
 
 ScriptEntity* ScriptManager::getEntityByClassname(const std::string& classname) {
-    if (!app || !app->mapRenderer || !app->mapRenderer->map) return nullptr;
+    Bsp* map = getCurrentMap();
+    if (!map) return nullptr;
     
-    Bsp* map = app->mapRenderer->map;
     for (int i = 0; i < (int)map->ents.size(); i++) {
         if (map->ents[i]->getClassname() == classname) {
             return getEntity(i);
@@ -1291,9 +1330,9 @@ ScriptEntity* ScriptManager::getEntityByClassname(const std::string& classname) 
 }
 
 ScriptEntity* ScriptManager::createEntity(const std::string& classname) {
-    if (!app || !app->mapRenderer || !app->mapRenderer->map) return nullptr;
+    Bsp* map = getCurrentMap();
+    if (!map) return nullptr;
     
-    Bsp* map = app->mapRenderer->map;
     Entity* ent = new Entity(classname);
     
     // In batch mode, track entity for grouped undo but don't add to map yet
@@ -1317,9 +1356,9 @@ ScriptEntity* ScriptManager::createEntity(const std::string& classname) {
 }
 
 void ScriptManager::deleteEntity(int index) {
-    if (!app || !app->mapRenderer || !app->mapRenderer->map) return;
-    
-    Bsp* map = app->mapRenderer->map;
+    Bsp* map = getCurrentMap();
+    if (!map) return;
+
     if (index <= 0 || index >= (int)map->ents.size()) {
         logf("Cannot delete entity at index %d (invalid or worldspawn)\n", index);
         return;
@@ -1364,24 +1403,32 @@ void ScriptManager::printError(const std::string& message) {
 }
 
 std::string ScriptManager::getMapName() const {
-    if (!app || !app->mapRenderer || !app->mapRenderer->map) return "";
-    return app->mapRenderer->map->name;
+    Bsp* map = getCurrentMap();
+    if (!map) return "";
+
+    return map->name;
 }
 
 void ScriptManager::refreshEntityDisplay() {
-    if (!app || !app->mapRenderer) return;
+    Bsp* map = getCurrentMap();
+    if (!map) return;
     
     // Refresh the entity rendering
-    app->mapRenderer->preRenderEnts();
+    if (app && app->mapRenderer) {
+        for (int i = 0; i < (int)map->ents.size(); i++) {
+            app->mapRenderer->refreshEnt(i);
+		}
+	}
+    //app->mapRenderer->preRenderEnts();
     
     logf("[Script] Entity display refreshed\n");
 }
 
 std::vector<ScriptEntity*> ScriptManager::getAllEntitiesByClassname(const std::string& classname) {
     std::vector<ScriptEntity*> result;
-    if (!app || !app->mapRenderer || !app->mapRenderer->map) return result;
+    Bsp* map = getCurrentMap();
+	if (!map) return result;
     
-    Bsp* map = app->mapRenderer->map;
     for (int i = 0; i < (int)map->ents.size(); i++) {
         if (map->ents[i]->getClassname() == classname) {
             result.push_back(getEntity(i));
@@ -1495,7 +1542,9 @@ void ScriptManager::endEntityBatch() {
     // The entities are already in the map, so we're set up correctly:
     // - Undo will remove the last N entities (which are ours)
     // - Redo (execute) will add them back from the stored copies
-    app->pushUndoCommand(cmd);
+    if (app) {
+        app->pushUndoCommand(cmd);
+    }
     
     logf("[Script] Entity batch ended (%d entities, grouped for undo)\n", numBatched);
     batchCreatedEntities.clear();
@@ -1512,15 +1561,14 @@ CScriptArray* ScriptManager::getSelectedEntities() {
     CScriptArray* arr = CScriptArray::Create(arrayType);
     if (!arr) return nullptr;
     
-    if (!app || !app->mapRenderer || !app->mapRenderer->map) {
+    Bsp* map = getCurrentMap();
+    if (!app || !map || app->pickInfo.ents.empty()) {
         return arr; // Return empty array
     }
     
     if (app->pickInfo.ents.empty()) {
         return arr; // Return empty array
     }
-    
-    Bsp* map = app->mapRenderer->map;
     
     for (int entIdx : app->pickInfo.ents) {
         if (entIdx >= 0 && entIdx < (int)map->ents.size()) {
@@ -1540,17 +1588,9 @@ int ScriptManager::getSelectedEntityCount() const {
 }
 
 void ScriptManager::selectEntity(int index) {
-    if (!app || !app->mapRenderer || !app->mapRenderer->map) {
-        logf("[Script ERROR] No map loaded\n");
-        return;
-    }
-    
-    Bsp* map = app->mapRenderer->map;
-    if (index < 0 || index >= (int)map->ents.size()) {
-        logf("[Script ERROR] Invalid entity index: %d\n", index);
-        return;
-    }
-    
+    Bsp* map = getCurrentMap();
+    if (!app || !map) return;
+    if (index < 0 || index >= (int)map->ents.size()) return;
     app->pickInfo.selectEnt(index);
 }
 

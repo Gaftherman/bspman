@@ -170,6 +170,7 @@ public:
     
     // Initialize AngelScript engine
     bool init(Renderer* renderer);
+    bool initCLI(Bsp* map);
     void shutdown();
     
     // Script file management
@@ -242,6 +243,10 @@ private:
     std::vector<ScriptInfo> scriptList;
     ScriptFolder scriptRoot;  // Hierarchical folder structure
     std::string scriptsFolder;
+
+    // For CLI mode
+	Bsp* cliMap;
+    Bsp* getCurrentMap() const;
     
     void scanScriptsFolder(const std::string& folderPath, ScriptFolder& folder);
     

@@ -4,6 +4,12 @@
 #include "CommandLine.h"
 #include "Renderer.h"
 #include "globals.h"
+#include "ScriptManager.h"
+
+#include <sys/stat.h>
+#ifndef WIN32
+#include <dirent.h>
+#endif
 
 // fix v6:
 // - force rotate not refreshing entities anymore
@@ -658,6 +664,19 @@ void print_help(string command) {
 			"  -all          : Show the full list of models when using -limit.\n"
 			);
 	}
+	else if (command == "script") {
+		logf(
+			"script - Execute an AngelScript file on the BSP\n\n"
+
+			"Usage:   bspguy script <mapname> <script_file.as> [options]\n"
+			"         bspguy <mapname> <script_file.as> [options] (shortcut)\n"
+			"Example: bspguy script svencoop1.bsp myscript.as -o svencoop1_mod.bsp\n"
+
+			"\n[Options]\n"
+			"  -o <dir/file> : Output directory (for batch) or exact file (for single map).\n"
+			"  -suffix <str> : Appends a string to the end of the map name (e.g. -suffix _mod).\n"
+		);
+	}
 	else if (command == "noclip") {
 		logf(
 			"noclip - Delete some clipnodes from the BSP\n\n"
@@ -751,6 +770,7 @@ void print_help(string command) {
 			"  transform : Apply 3D transformations to the BSP\n"
 			"  unembed   : Deletes embedded texture data\n"
 			"  renametex : Renames/replaces a texture in the BSP\n"
+			"  script    : Execute an AngelScript file on the map\n"
 
 			"\nRun 'bspguy <command> help' to read about a specific command.\n"
 			"\nTo launch the 3D editor, run this program without any arguments."
@@ -807,6 +827,137 @@ void init_limits() {
 	g_limits = g_engine_limits[ENGINE_SVEN_COOP];
 }
 
+bool is_directory(const string& path) {
+	struct stat statbuf;
+	if (stat(path.c_str(), &statbuf) != 0) return false;
+	return (statbuf.st_mode & S_IFDIR) != 0;
+}
+
+vector<string> get_bsp_files(const string& dir_path) {
+	vector<string> files;
+	string sep = (dir_path.empty() || dir_path.back() == '/' || dir_path.back() == '\\') ? "" : "/";
+
+#ifdef WIN32
+	string searchPath = dir_path + sep + "*.bsp";
+	WIN32_FIND_DATAA findData;
+	HANDLE hFind = FindFirstFileA(searchPath.c_str(), &findData);
+	if (hFind != INVALID_HANDLE_VALUE) {
+		do {
+			if (!(findData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
+				string fname = findData.cFileName;
+				if (fname.length() > 4) files.push_back(dir_path + sep + fname);
+			}
+		} while (FindNextFileA(hFind, &findData));
+		FindClose(hFind);
+	}
+#else
+	DIR* dir = opendir(dir_path.c_str());
+	if (dir) {
+		struct dirent* entry;
+		while ((entry = readdir(dir)) != nullptr) {
+			string fname = entry->d_name;
+			if (fname.length() > 4 && fname.substr(fname.length() - 4) == ".bsp") {
+				files.push_back(dir_path + sep + fname);
+			}
+		}
+		closedir(dir);
+	}
+#endif
+	return files;
+}
+
+int run_script(CommandLine& cli) {
+	if (cli.options.empty()) {
+		logf("ERROR: No script file specified\n");
+		return 1;
+	}
+
+	string scriptPath = cli.options[0];
+	vector<string> bsp_files;
+
+	if (is_directory(cli.bspfile)) {
+		bsp_files = get_bsp_files(cli.bspfile);
+		if (bsp_files.empty()) {
+			logf("ERROR: No valid .bsp files found in directory %s\n", cli.bspfile.c_str());
+			return 1;
+		}
+		logf("Found %d .bsp files in directory.\n", (int)bsp_files.size());
+	}
+	else {
+		bsp_files.push_back(cli.bspfile);
+	}
+
+	bool has_outdir = cli.hasOption("-o");
+	string outdir = has_outdir ? cli.getOption("-o") : "";
+	string suffix = cli.hasOption("-suffix") ? cli.getOption("-suffix") : "";
+
+	int successCount = 0;
+
+	for (size_t i = 0; i < bsp_files.size(); i++) {
+		string current_bsp = bsp_files[i];
+		logf("\n--- Processing %s ---\n", current_bsp.c_str());
+
+		Bsp* map = new Bsp(current_bsp);
+		if (!map->valid) {
+			logf("ERROR: Failed to load %s\n", current_bsp.c_str());
+			delete map;
+			continue;
+		}
+
+		g_scriptManager = new ScriptManager();
+		if (!g_scriptManager->initCLI(map)) {
+			logf("ERROR: Failed to initialize AngelScript engine for %s.\n", current_bsp.c_str());
+			delete g_scriptManager;
+			delete map;
+			continue;
+		}
+
+		if (g_scriptManager->executeScript(scriptPath)) {
+			string output_name = map->path;
+
+			if (has_outdir || suffix.length() > 0) {
+				if (bsp_files.size() == 1 && has_outdir && !is_directory(outdir) && outdir.back() != '/' && outdir.back() != '\\' && suffix.empty()) {
+					output_name = outdir;
+					if (output_name.length() < 4 || output_name.substr(output_name.length() - 4) != ".bsp") {
+						output_name += ".bsp";
+					}
+				}
+				else {
+					string base_dir = "";
+					size_t last_slash = map->path.find_last_of("/\\");
+					if (last_slash != string::npos) {
+						base_dir = map->path.substr(0, last_slash + 1);
+					}
+
+					string target_dir = has_outdir ? outdir : base_dir;
+					if (target_dir.length() > 0 && target_dir.back() != '/' && target_dir.back() != '\\') {
+						target_dir += "/";
+					}
+
+					output_name = target_dir + map->name + suffix + ".bsp";
+				}
+			}
+
+			if (map->isValid()) {
+				map->update_ent_lump();
+				map->write(output_name);
+				logf("Map saved to %s\n", output_name.c_str());
+				successCount++;
+			}
+		}
+
+		delete g_scriptManager;
+		g_scriptManager = nullptr;
+		delete map;
+	}
+
+	if (bsp_files.size() > 1) {
+		logf("\n--- Batch processing complete. Successfully modified %d/%d maps. ---\n", successCount, (int)bsp_files.size());
+	}
+
+	return 0;
+}
+
 int main(int argc, char* argv[])
 {
 	#ifdef WIN32
@@ -850,8 +1001,17 @@ int main(int argc, char* argv[])
 			g_verbose = true;
 		}
 
+		if (cli.bspfile.length() >= 3 && cli.bspfile.substr(cli.bspfile.length() - 3) == ".as") {
+			cli.options.insert(cli.options.begin(), cli.bspfile);
+			cli.bspfile = cli.command;
+			cli.command = "script";
+		}
+
 		if (cli.command == "info") {
 			return print_info(cli);
+		}
+		else if (cli.command == "script") {
+			return run_script(cli);
 		}
 		else if (cli.command == "noclip") {
 			return noclip(cli);
