@@ -1,6 +1,11 @@
 name: C/C++ CI
 
-on: [push, pull_request]
+on: 
+  push:
+    branches: [ "main", "master" ]
+    tags:
+      - 'v*'
+  pull_request:
 
 jobs:
   build-windows:
@@ -48,3 +53,38 @@ jobs:
       with:
         name: bspguy-linux
         path: build/bspguy
+
+  create-release:
+    name: Create GitHub Release
+    needs: [build-windows, build-linux]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download Windows Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: bspguy-windows
+          path: bspguy-windows
+
+      - name: Download Linux Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: bspguy-linux
+          path: bspguy-linux
+
+      - name: Zip Artifacts
+        run: |
+          zip -r bspguy-windows.zip bspguy-windows
+          zip -r bspguy-linux.zip bspguy-linux
+
+      - name: Publish Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            bspguy-windows.zip
+            bspguy-linux.zip
+          generate_release_notes: true
