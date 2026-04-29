@@ -455,9 +455,9 @@ bool ScriptManager::init(Renderer* renderer) {
     
     // Register standard add-ons
     RegisterStdString(engine);
-    RegisterStdStringUtils(engine);
     RegisterScriptArray(engine, true);
     registerArrayExtensions();
+    RegisterStdStringUtils(engine);
     RegisterScriptDictionary(engine);
     RegisterScriptDateTime(engine);
     RegisterScriptMath(engine);
@@ -504,9 +504,9 @@ bool ScriptManager::initCLI(Bsp* map) {
     engine->SetMessageCallback(asFUNCTION(messageCallback), nullptr, asCALL_CDECL);
 
     RegisterStdString(engine);
-    RegisterStdStringUtils(engine);
     RegisterScriptArray(engine, true);
     registerArrayExtensions();
+    RegisterStdStringUtils(engine);
     RegisterScriptDictionary(engine);
     RegisterScriptDateTime(engine);
     RegisterScriptMath(engine);
