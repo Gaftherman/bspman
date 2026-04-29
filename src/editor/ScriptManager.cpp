@@ -18,6 +18,7 @@
 #include "scriptfile/scriptfile.h"
 #include "scriptfile/scriptfilesystem.h"
 #include "datetime/datetime.h"
+#include <scriptdictionary/scriptdictionary.h>
 
 #include <fstream>
 #include <sstream>
@@ -454,8 +455,10 @@ bool ScriptManager::init(Renderer* renderer) {
     
     // Register standard add-ons
     RegisterStdString(engine);
+    RegisterStdStringUtils(engine);
     RegisterScriptArray(engine, true);
     registerArrayExtensions();
+    RegisterScriptDictionary(engine);
     RegisterScriptDateTime(engine);
     RegisterScriptMath(engine);
 	RegisterScriptFile(engine);
@@ -501,8 +504,10 @@ bool ScriptManager::initCLI(Bsp* map) {
     engine->SetMessageCallback(asFUNCTION(messageCallback), nullptr, asCALL_CDECL);
 
     RegisterStdString(engine);
+    RegisterStdStringUtils(engine);
     RegisterScriptArray(engine, true);
     registerArrayExtensions();
+    RegisterScriptDictionary(engine);
     RegisterScriptDateTime(engine);
     RegisterScriptMath(engine);
     RegisterScriptFile(engine);
@@ -1325,116 +1330,178 @@ bool ScriptManager::isEntitySelected(int index) const {
     return app->pickInfo.isEntSelected(index);
 }
 
-// ==========================================
-// Extension method for array filtering (similar to LINQ's Where in C#)
-// ==========================================
+// ========================================================================
+// LINQ Extensions - Implementation for array<T>
+// ========================================================================
 
-CScriptArray* ArrayWhere(asIScriptFunction* func, CScriptArray* arr)
-{
+CScriptArray* ArrayWhere(asIScriptFunction* func, CScriptArray* arr) {
     asIScriptEngine* engine = arr->GetArrayObjectType()->GetEngine();
     CScriptArray* result = CScriptArray::Create(arr->GetArrayObjectType());
-
     if (func == 0 || arr->GetSize() == 0) return result;
 
-    asIScriptContext* cmpContext = 0;
-    bool isNested = false;
-
-    cmpContext = asGetActiveContext();
-    if (cmpContext) {
-        if (cmpContext->GetEngine() == engine && cmpContext->PushState() >= 0)
-            isNested = true;
-        else
-            cmpContext = 0;
-    }
-
-    if (cmpContext == 0) cmpContext = engine->RequestContext();
+    asIScriptContext* ctx = asGetActiveContext();
+    bool isNested = (ctx && ctx->GetEngine() == engine && ctx->PushState() >= 0);
+    if (!isNested) ctx = engine->RequestContext();
 
     for (asUINT i = 0; i < arr->GetSize(); i++) {
-        cmpContext->Prepare(func);
-        cmpContext->SetArgAddress(0, const_cast<void*>(arr->At(i)));
-        int r = cmpContext->Execute();
-
-        if (r != asEXECUTION_FINISHED) break;
-
-        if (*(bool*)(cmpContext->GetAddressOfReturnValue())) {
-            result->InsertLast(const_cast<void*>(arr->At(i)));
+        ctx->Prepare(func);
+        ctx->SetArgAddress(0, const_cast<void*>(arr->At(i)));
+        if (ctx->Execute() == asEXECUTION_FINISHED) {
+            if (*(bool*)(ctx->GetAddressOfReturnValue())) {
+                result->InsertLast(const_cast<void*>(arr->At(i)));
+            }
         }
+        else break;
     }
 
-    if (cmpContext) {
-        if (isNested) {
-            asEContextState state = cmpContext->GetState();
-            cmpContext->PopState();
-            if (state == asEXECUTION_ABORTED) cmpContext->Abort();
-        }
-        else {
-            engine->ReturnContext(cmpContext);
-        }
-    }
+    if (isNested) ctx->PopState();
+    else engine->ReturnContext(ctx);
     return result;
 }
 
-int ArrayFirstIndex(asIScriptFunction* func, CScriptArray* arr)
-{
-    if (func == 0 || arr->GetSize() == 0) return -1;
-
+bool ArrayAny(asIScriptFunction* func, CScriptArray* arr) {
+    if (func == 0 || arr->GetSize() == 0) return false;
     asIScriptEngine* engine = arr->GetArrayObjectType()->GetEngine();
-    asIScriptContext* cmpContext = 0;
-    bool isNested = false;
+    asIScriptContext* ctx = asGetActiveContext();
+    bool isNested = (ctx && ctx->GetEngine() == engine && ctx->PushState() >= 0);
+    if (!isNested) ctx = engine->RequestContext();
 
-    cmpContext = asGetActiveContext();
-    if (cmpContext) {
-        if (cmpContext->GetEngine() == engine && cmpContext->PushState() >= 0)
-            isNested = true;
-        else
-            cmpContext = 0;
-    }
-
-    if (cmpContext == 0) cmpContext = engine->RequestContext();
-
-    int matchIndex = -1;
-
+    bool found = false;
     for (asUINT i = 0; i < arr->GetSize(); i++) {
-        cmpContext->Prepare(func);
-        cmpContext->SetArgAddress(0, const_cast<void*>(arr->At(i)));
-        int r = cmpContext->Execute();
-
-        if (r != asEXECUTION_FINISHED) break;
-
-        if (*(bool*)(cmpContext->GetAddressOfReturnValue())) {
-            matchIndex = i;
-            break;
+        ctx->Prepare(func);
+        ctx->SetArgAddress(0, const_cast<void*>(arr->At(i)));
+        if (ctx->Execute() == asEXECUTION_FINISHED) {
+            if (*(bool*)(ctx->GetAddressOfReturnValue())) {
+                found = true;
+                break;
+            }
         }
+        else break;
     }
 
-    if (cmpContext) {
-        if (isNested) {
-            asEContextState state = cmpContext->GetState();
-            cmpContext->PopState();
-            if (state == asEXECUTION_ABORTED) cmpContext->Abort();
-        }
-        else {
-            engine->ReturnContext(cmpContext);
-        }
-    }
-    return matchIndex;
+    if (isNested) ctx->PopState();
+    else engine->ReturnContext(ctx);
+    return found;
 }
 
-void* ArrayFirst(asIScriptFunction* func, CScriptArray* arr)
-{
-    int idx = ArrayFirstIndex(func, arr);
-
-    if (idx >= 0) {
-        return const_cast<void*>(arr->At(idx));
-    }
-
+bool ArrayAll(asIScriptFunction* func, CScriptArray* arr) {
+    if (func == 0) return false;
+    if (arr->GetSize() == 0) return true;
+    asIScriptEngine* engine = arr->GetArrayObjectType()->GetEngine();
     asIScriptContext* ctx = asGetActiveContext();
-    if (ctx) {
-        ctx->SetException("Sequence contains no matching element");
+    bool isNested = (ctx && ctx->GetEngine() == engine && ctx->PushState() >= 0);
+    if (!isNested) ctx = engine->RequestContext();
+
+    bool allMatch = true;
+    for (asUINT i = 0; i < arr->GetSize(); i++) {
+        ctx->Prepare(func);
+        ctx->SetArgAddress(0, const_cast<void*>(arr->At(i)));
+        if (ctx->Execute() == asEXECUTION_FINISHED) {
+            if (!(*(bool*)(ctx->GetAddressOfReturnValue()))) {
+                allMatch = false;
+                break;
+            }
+        }
+        else { allMatch = false; break; }
     }
+
+    if (isNested) ctx->PopState();
+    else engine->ReturnContext(ctx);
+    return allMatch;
+}
+
+int ArrayCount(asIScriptFunction* func, CScriptArray* arr) {
+    if (func == 0 || arr->GetSize() == 0) return 0;
+    asIScriptEngine* engine = arr->GetArrayObjectType()->GetEngine();
+    asIScriptContext* ctx = asGetActiveContext();
+    bool isNested = (ctx && ctx->GetEngine() == engine && ctx->PushState() >= 0);
+    if (!isNested) ctx = engine->RequestContext();
+
+    int count = 0;
+    for (asUINT i = 0; i < arr->GetSize(); i++) {
+        ctx->Prepare(func);
+        ctx->SetArgAddress(0, const_cast<void*>(arr->At(i)));
+        if (ctx->Execute() == asEXECUTION_FINISHED) {
+            if (*(bool*)(ctx->GetAddressOfReturnValue())) count++;
+        }
+        else break;
+    }
+
+    if (isNested) ctx->PopState();
+    else engine->ReturnContext(ctx);
+    return count;
+}
+
+int ArrayFirstIndex(asIScriptFunction* func, CScriptArray* arr) {
+    if (func == 0 || arr->GetSize() == 0) return -1;
+    asIScriptEngine* engine = arr->GetArrayObjectType()->GetEngine();
+    asIScriptContext* ctx = asGetActiveContext();
+    bool isNested = (ctx && ctx->GetEngine() == engine && ctx->PushState() >= 0);
+    if (!isNested) ctx = engine->RequestContext();
+
+    int matchIdx = -1;
+    for (asUINT i = 0; i < arr->GetSize(); i++) {
+        ctx->Prepare(func);
+        ctx->SetArgAddress(0, const_cast<void*>(arr->At(i)));
+        if (ctx->Execute() == asEXECUTION_FINISHED) {
+            if (*(bool*)(ctx->GetAddressOfReturnValue())) {
+                matchIdx = (int)i;
+                break;
+            }
+        }
+        else break;
+    }
+
+    if (isNested) ctx->PopState();
+    else engine->ReturnContext(ctx);
+    return matchIdx;
+}
+
+void* ArrayFirst(asIScriptFunction* func, CScriptArray* arr) {
+    int idx = ArrayFirstIndex(func, arr);
+    if (idx >= 0) return const_cast<void*>(arr->At(idx));
+    asIScriptContext* ctx = asGetActiveContext();
+    if (ctx) ctx->SetException("Sequence contains no matching element");
     return 0;
 }
 
+void* ArrayFirstOrDefault(asIScriptFunction* func, void* defaultValue, CScriptArray* arr) {
+    int idx = ArrayFirstIndex(func, arr);
+    return (idx >= 0) ? const_cast<void*>(arr->At(idx)) : defaultValue;
+}
+
+int ArrayLastIndex(asIScriptFunction* func, CScriptArray* arr) {
+    if (func == 0 || arr->GetSize() == 0) return -1;
+    asIScriptEngine* engine = arr->GetArrayObjectType()->GetEngine();
+    asIScriptContext* ctx = asGetActiveContext();
+    bool isNested = (ctx && ctx->GetEngine() == engine && ctx->PushState() >= 0);
+    if (!isNested) ctx = engine->RequestContext();
+
+    int lastIdx = -1;
+    for (int i = (int)arr->GetSize() - 1; i >= 0; i--) {
+        ctx->Prepare(func);
+        ctx->SetArgAddress(0, const_cast<void*>(arr->At(i)));
+        if (ctx->Execute() == asEXECUTION_FINISHED) {
+            if (*(bool*)(ctx->GetAddressOfReturnValue())) {
+                lastIdx = i;
+                break;
+            }
+        }
+        else break;
+    }
+
+    if (isNested) ctx->PopState();
+    else engine->ReturnContext(ctx);
+    return lastIdx;
+}
+
+void* ArrayLast(asIScriptFunction* func, CScriptArray* arr) {
+    int idx = ArrayLastIndex(func, arr);
+    if (idx >= 0) return const_cast<void*>(arr->At(idx));
+    asIScriptContext* ctx = asGetActiveContext();
+    if (ctx) ctx->SetException("Sequence contains no matching element");
+    return 0;
+}
 void ScriptManager::registerTypes() {
     int r;
 
@@ -1803,19 +1870,37 @@ void ScriptManager::registerArrayExtensions() {
     int r;
 
     // ========================================================================
-    // Array Extensions - Higher-order functions for filtering and searching
+    // Array Extensions - LINQ standard query operators
     // ========================================================================
-
-    assert(engine->GetTypeInfoByDecl("array<T>") != 0 && "ERROR: You must call RegisterScriptArray before calling registerArrayExtensions!");
 
     // Register a generic function definition for the filter callbacks
     r = engine->RegisterFuncdef("bool array<T>::filter(const T&in if_handle_then_const)"); assert(r >= 0);
 
-    // Register LINQ-style array methods
+    // Register Where (Filtering)
     r = engine->RegisterObjectMethod("array<T>", "array<T>@ Where(const filter &in) const",
         asFUNCTION(ArrayWhere), asCALL_CDECL_OBJLAST); assert(r >= 0);
+
+    // Register Boolean checks
+    r = engine->RegisterObjectMethod("array<T>", "bool Any(const filter &in) const",
+        asFUNCTION(ArrayAny), asCALL_CDECL_OBJLAST); assert(r >= 0);
+    r = engine->RegisterObjectMethod("array<T>", "bool All(const filter &in) const",
+        asFUNCTION(ArrayAll), asCALL_CDECL_OBJLAST); assert(r >= 0);
+
+    // Register Counting
+    r = engine->RegisterObjectMethod("array<T>", "int Count(const filter &in) const",
+        asFUNCTION(ArrayCount), asCALL_CDECL_OBJLAST); assert(r >= 0);
+
+    // Register First/FirstOrDefault
     r = engine->RegisterObjectMethod("array<T>", "int FirstIndex(const filter &in) const",
         asFUNCTION(ArrayFirstIndex), asCALL_CDECL_OBJLAST); assert(r >= 0);
     r = engine->RegisterObjectMethod("array<T>", "T& First(const filter &in) const",
         asFUNCTION(ArrayFirst), asCALL_CDECL_OBJLAST); assert(r >= 0);
+    r = engine->RegisterObjectMethod("array<T>", "T& FirstOrDefault(const filter &in, const T&in) const",
+        asFUNCTION(ArrayFirstOrDefault), asCALL_CDECL_OBJLAST); assert(r >= 0);
+
+    // Register Last/LastIndex
+    r = engine->RegisterObjectMethod("array<T>", "int LastIndex(const filter &in) const",
+        asFUNCTION(ArrayLastIndex), asCALL_CDECL_OBJLAST); assert(r >= 0);
+    r = engine->RegisterObjectMethod("array<T>", "T& Last(const filter &in) const",
+        asFUNCTION(ArrayLast), asCALL_CDECL_OBJLAST); assert(r >= 0);
 }
