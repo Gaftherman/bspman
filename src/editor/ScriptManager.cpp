@@ -15,6 +15,9 @@
 #include "scriptarray/scriptarray.h"
 #include "scriptmath/scriptmath.h"
 #include "scripthelper/scripthelper.h"
+#include "scriptfile/scriptfile.h"
+#include "scriptfile/scriptfilesystem.h"
+#include "datetime/datetime.h"
 
 #include <fstream>
 #include <sstream>
@@ -452,10 +455,15 @@ bool ScriptManager::init(Renderer* renderer) {
     // Register standard add-ons
     RegisterStdString(engine);
     RegisterScriptArray(engine, true);
+    registerArrayExtensions();
+    RegisterScriptDateTime(engine);
     RegisterScriptMath(engine);
+	RegisterScriptFile(engine);
+	RegisterScriptFileSystem(engine);
     RegisterExceptionRoutines(engine);
-    
+
     // Register custom types and functions
+    registerMathTypes();
     registerTypes();
     registerEntityMethods();
     registerGlobalFunctions();
@@ -494,9 +502,14 @@ bool ScriptManager::initCLI(Bsp* map) {
 
     RegisterStdString(engine);
     RegisterScriptArray(engine, true);
+    registerArrayExtensions();
+    RegisterScriptDateTime(engine);
     RegisterScriptMath(engine);
+    RegisterScriptFile(engine);
+    RegisterScriptFileSystem(engine);
     RegisterExceptionRoutines(engine);
 
+    registerMathTypes();
     registerTypes();
     registerEntityMethods();
     registerGlobalFunctions();
@@ -530,186 +543,6 @@ void ScriptManager::shutdown() {
     }
     
     currentModule = nullptr;
-}
-
-void ScriptManager::registerTypes() {
-    int r;
-    
-    // ====== Register Vec3 as a value type ======
-    r = engine->RegisterObjectType("Vec3", sizeof(ScriptVec3), asOBJ_VALUE | asOBJ_POD | asGetTypeTraits<ScriptVec3>()); assert(r >= 0);
-    
-    // Vec3 constructors
-    r = engine->RegisterObjectBehaviour("Vec3", asBEHAVE_CONSTRUCT, "void f()", 
-        asFUNCTIONPR([](void* mem) { new(mem) ScriptVec3(); }, (void*), void), asCALL_CDECL_OBJFIRST); assert(r >= 0);
-    r = engine->RegisterObjectBehaviour("Vec3", asBEHAVE_CONSTRUCT, "void f(float, float, float)", 
-        asFUNCTIONPR([](void* mem, float x, float y, float z) { new(mem) ScriptVec3(x, y, z); }, (void*, float, float, float), void), asCALL_CDECL_OBJFIRST); assert(r >= 0);
-    r = engine->RegisterObjectBehaviour("Vec3", asBEHAVE_CONSTRUCT, "void f(const Vec3 &in)", 
-        asFUNCTIONPR([](void* mem, const ScriptVec3& other) { new(mem) ScriptVec3(other); }, (void*, const ScriptVec3&), void), asCALL_CDECL_OBJFIRST); assert(r >= 0);
-    
-    // Vec3 properties
-    r = engine->RegisterObjectProperty("Vec3", "float x", asOFFSET(ScriptVec3, x)); assert(r >= 0);
-    r = engine->RegisterObjectProperty("Vec3", "float y", asOFFSET(ScriptVec3, y)); assert(r >= 0);
-    r = engine->RegisterObjectProperty("Vec3", "float z", asOFFSET(ScriptVec3, z)); assert(r >= 0);
-    
-    // Vec3 operators
-    r = engine->RegisterObjectMethod("Vec3", "Vec3 &opAssign(const Vec3 &in)", asMETHOD(ScriptVec3, operator=), asCALL_THISCALL); assert(r >= 0);
-    r = engine->RegisterObjectMethod("Vec3", "Vec3 opAdd(const Vec3 &in) const", asMETHODPR(ScriptVec3, operator+, (const ScriptVec3&) const, ScriptVec3), asCALL_THISCALL); assert(r >= 0);
-    r = engine->RegisterObjectMethod("Vec3", "Vec3 opSub(const Vec3 &in) const", asMETHODPR(ScriptVec3, operator-, (const ScriptVec3&) const, ScriptVec3), asCALL_THISCALL); assert(r >= 0);
-    r = engine->RegisterObjectMethod("Vec3", "Vec3 opMul(float) const", asMETHODPR(ScriptVec3, operator*, (float) const, ScriptVec3), asCALL_THISCALL); assert(r >= 0);
-    r = engine->RegisterObjectMethod("Vec3", "Vec3 opDiv(float) const", asMETHODPR(ScriptVec3, operator/, (float) const, ScriptVec3), asCALL_THISCALL); assert(r >= 0);
-    r = engine->RegisterObjectMethod("Vec3", "Vec3 opNeg() const", asMETHODPR(ScriptVec3, operator-, () const, ScriptVec3), asCALL_THISCALL); assert(r >= 0);
-    r = engine->RegisterObjectMethod("Vec3", "bool opEquals(const Vec3 &in) const", asMETHOD(ScriptVec3, operator==), asCALL_THISCALL); assert(r >= 0);
-    r = engine->RegisterObjectMethod("Vec3", "Vec3 &opAddAssign(const Vec3 &in)", asMETHOD(ScriptVec3, operator+=), asCALL_THISCALL); assert(r >= 0);
-    r = engine->RegisterObjectMethod("Vec3", "Vec3 &opSubAssign(const Vec3 &in)", asMETHOD(ScriptVec3, operator-=), asCALL_THISCALL); assert(r >= 0);
-    r = engine->RegisterObjectMethod("Vec3", "Vec3 &opMulAssign(float)", asMETHODPR(ScriptVec3, operator*=, (float), ScriptVec3&), asCALL_THISCALL); assert(r >= 0);
-    r = engine->RegisterObjectMethod("Vec3", "Vec3 &opDivAssign(float)", asMETHODPR(ScriptVec3, operator/=, (float), ScriptVec3&), asCALL_THISCALL); assert(r >= 0);
-    
-    // Vec3 methods
-    r = engine->RegisterObjectMethod("Vec3", "float length() const", asMETHOD(ScriptVec3, length), asCALL_THISCALL); assert(r >= 0);
-    r = engine->RegisterObjectMethod("Vec3", "float lengthSq() const", asMETHOD(ScriptVec3, lengthSq), asCALL_THISCALL); assert(r >= 0);
-    r = engine->RegisterObjectMethod("Vec3", "float dot(const Vec3 &in) const", asMETHOD(ScriptVec3, dot), asCALL_THISCALL); assert(r >= 0);
-    r = engine->RegisterObjectMethod("Vec3", "Vec3 cross(const Vec3 &in) const", asMETHOD(ScriptVec3, cross), asCALL_THISCALL); assert(r >= 0);
-    r = engine->RegisterObjectMethod("Vec3", "Vec3 normalized() const", asMETHOD(ScriptVec3, normalized), asCALL_THISCALL); assert(r >= 0);
-    r = engine->RegisterObjectMethod("Vec3", "void normalize()", asMETHOD(ScriptVec3, normalize), asCALL_THISCALL); assert(r >= 0);
-    r = engine->RegisterObjectMethod("Vec3", "float distance(const Vec3 &in) const", asMETHOD(ScriptVec3, distance), asCALL_THISCALL); assert(r >= 0);
-    r = engine->RegisterObjectMethod("Vec3", "Vec3 lerp(const Vec3 &in, float) const", asMETHOD(ScriptVec3, lerp), asCALL_THISCALL); assert(r >= 0);
-    r = engine->RegisterObjectMethod("Vec3", "string toString() const", asMETHOD(ScriptVec3, toString), asCALL_THISCALL); assert(r >= 0);
-    
-    // Vec3 static factory functions (in Vec3 namespace)
-    r = engine->SetDefaultNamespace("Vec3"); assert(r >= 0);
-    r = engine->RegisterGlobalFunction("Vec3 fromString(const string &in)", asFUNCTION(ScriptVec3::fromString), asCALL_CDECL); assert(r >= 0);
-    r = engine->RegisterGlobalFunction("Vec3 zero()", asFUNCTION(ScriptVec3::zero), asCALL_CDECL); assert(r >= 0);
-    r = engine->RegisterGlobalFunction("Vec3 one()", asFUNCTION(ScriptVec3::one), asCALL_CDECL); assert(r >= 0);
-    r = engine->RegisterGlobalFunction("Vec3 up()", asFUNCTION(ScriptVec3::up), asCALL_CDECL); assert(r >= 0);
-    r = engine->RegisterGlobalFunction("Vec3 forward()", asFUNCTION(ScriptVec3::forward), asCALL_CDECL); assert(r >= 0);
-    r = engine->RegisterGlobalFunction("Vec3 right()", asFUNCTION(ScriptVec3::right), asCALL_CDECL); assert(r >= 0);
-    r = engine->SetDefaultNamespace(""); assert(r >= 0);
-    
-    // ====== Register RGB as a value type ======
-    r = engine->RegisterObjectType("RGB", sizeof(ScriptRGB), asOBJ_VALUE | asOBJ_POD | asGetTypeTraits<ScriptRGB>()); assert(r >= 0);
-    
-    // RGB constructors
-    r = engine->RegisterObjectBehaviour("RGB", asBEHAVE_CONSTRUCT, "void f()", 
-        asFUNCTIONPR([](void* mem) { new(mem) ScriptRGB(); }, (void*), void), asCALL_CDECL_OBJFIRST); assert(r >= 0);
-    r = engine->RegisterObjectBehaviour("RGB", asBEHAVE_CONSTRUCT, "void f(int, int, int)", 
-        asFUNCTIONPR([](void* mem, int r, int g, int b) { new(mem) ScriptRGB(r, g, b); }, (void*, int, int, int), void), asCALL_CDECL_OBJFIRST); assert(r >= 0);
-    r = engine->RegisterObjectBehaviour("RGB", asBEHAVE_CONSTRUCT, "void f(const RGB &in)", 
-        asFUNCTIONPR([](void* mem, const ScriptRGB& other) { new(mem) ScriptRGB(other); }, (void*, const ScriptRGB&), void), asCALL_CDECL_OBJFIRST); assert(r >= 0);
-    
-    // RGB properties
-    r = engine->RegisterObjectProperty("RGB", "int r", asOFFSET(ScriptRGB, r)); assert(r >= 0);
-    r = engine->RegisterObjectProperty("RGB", "int g", asOFFSET(ScriptRGB, g)); assert(r >= 0);
-    r = engine->RegisterObjectProperty("RGB", "int b", asOFFSET(ScriptRGB, b)); assert(r >= 0);
-    
-    // RGB operators
-    r = engine->RegisterObjectMethod("RGB", "RGB &opAssign(const RGB &in)", asMETHOD(ScriptRGB, operator=), asCALL_THISCALL); assert(r >= 0);
-    r = engine->RegisterObjectMethod("RGB", "bool opEquals(const RGB &in) const", asMETHOD(ScriptRGB, operator==), asCALL_THISCALL); assert(r >= 0);
-    
-    // RGB methods
-    r = engine->RegisterObjectMethod("RGB", "RGB lerp(const RGB &in, float) const", asMETHOD(ScriptRGB, lerp), asCALL_THISCALL); assert(r >= 0);
-    r = engine->RegisterObjectMethod("RGB", "void clamp()", asMETHOD(ScriptRGB, clamp), asCALL_THISCALL); assert(r >= 0);
-    r = engine->RegisterObjectMethod("RGB", "string toString() const", asMETHOD(ScriptRGB, toString), asCALL_THISCALL); assert(r >= 0);
-    r = engine->RegisterObjectMethod("RGB", "string toLightString() const", asMETHOD(ScriptRGB, toLightString), asCALL_THISCALL); assert(r >= 0);
-    
-    // RGB static factory functions (in RGB namespace)
-    r = engine->SetDefaultNamespace("RGB"); assert(r >= 0);
-    r = engine->RegisterGlobalFunction("RGB fromString(const string &in)", asFUNCTION(ScriptRGB::fromString), asCALL_CDECL); assert(r >= 0);
-    r = engine->RegisterGlobalFunction("RGB white()", asFUNCTION(ScriptRGB::white), asCALL_CDECL); assert(r >= 0);
-    r = engine->RegisterGlobalFunction("RGB black()", asFUNCTION(ScriptRGB::black), asCALL_CDECL); assert(r >= 0);
-    r = engine->RegisterGlobalFunction("RGB red()", asFUNCTION(ScriptRGB::red), asCALL_CDECL); assert(r >= 0);
-    r = engine->RegisterGlobalFunction("RGB green()", asFUNCTION(ScriptRGB::green), asCALL_CDECL); assert(r >= 0);
-    r = engine->RegisterGlobalFunction("RGB blue()", asFUNCTION(ScriptRGB::blue), asCALL_CDECL); assert(r >= 0);
-    r = engine->RegisterGlobalFunction("RGB yellow()", asFUNCTION(ScriptRGB::yellow), asCALL_CDECL); assert(r >= 0);
-    r = engine->RegisterGlobalFunction("RGB cyan()", asFUNCTION(ScriptRGB::cyan), asCALL_CDECL); assert(r >= 0);
-    r = engine->RegisterGlobalFunction("RGB magenta()", asFUNCTION(ScriptRGB::magenta), asCALL_CDECL); assert(r >= 0);
-    r = engine->SetDefaultNamespace(""); assert(r >= 0);
-    
-    // ====== Register ScriptEntity as a reference type ======
-    r = engine->RegisterObjectType("Entity", 0, asOBJ_REF); assert(r >= 0);
-    
-    // Register reference counting behaviors
-    r = engine->RegisterObjectBehaviour("Entity", asBEHAVE_ADDREF, "void f()", 
-        asMETHOD(ScriptEntity, addRef), asCALL_THISCALL); assert(r >= 0);
-    r = engine->RegisterObjectBehaviour("Entity", asBEHAVE_RELEASE, "void f()", 
-        asMETHOD(ScriptEntity, release), asCALL_THISCALL); assert(r >= 0);
-}
-
-void ScriptManager::registerEntityMethods() {
-    int r;
-    
-    // Keyvalue methods
-    r = engine->RegisterObjectMethod("Entity", "string getKeyvalue(const string &in) const", 
-        asMETHOD(ScriptEntity, getKeyvalue), asCALL_THISCALL); assert(r >= 0);
-    r = engine->RegisterObjectMethod("Entity", "void setKeyvalue(const string &in, const string &in)", 
-        asMETHOD(ScriptEntity, setKeyvalue), asCALL_THISCALL); assert(r >= 0);
-    r = engine->RegisterObjectMethod("Entity", "bool hasKey(const string &in) const", 
-        asMETHOD(ScriptEntity, hasKey), asCALL_THISCALL); assert(r >= 0);
-    r = engine->RegisterObjectMethod("Entity", "void removeKeyvalue(const string &in)", 
-        asMETHOD(ScriptEntity, removeKeyvalue), asCALL_THISCALL); assert(r >= 0);
-    
-    // Classname and targetname
-    r = engine->RegisterObjectMethod("Entity", "string getClassname() const", 
-        asMETHOD(ScriptEntity, getClassname), asCALL_THISCALL); assert(r >= 0);
-    r = engine->RegisterObjectMethod("Entity", "string getTargetname() const", 
-        asMETHOD(ScriptEntity, getTargetname), asCALL_THISCALL); assert(r >= 0);
-    
-    // Origin
-    r = engine->RegisterObjectMethod("Entity", "float getOriginX() const", 
-        asMETHOD(ScriptEntity, getOriginX), asCALL_THISCALL); assert(r >= 0);
-    r = engine->RegisterObjectMethod("Entity", "float getOriginY() const", 
-        asMETHOD(ScriptEntity, getOriginY), asCALL_THISCALL); assert(r >= 0);
-    r = engine->RegisterObjectMethod("Entity", "float getOriginZ() const", 
-        asMETHOD(ScriptEntity, getOriginZ), asCALL_THISCALL); assert(r >= 0);
-    r = engine->RegisterObjectMethod("Entity", "void setOrigin(float, float, float)", 
-        asMETHOD(ScriptEntity, setOrigin), asCALL_THISCALL); assert(r >= 0);
-    
-    // Angles
-    r = engine->RegisterObjectMethod("Entity", "float getAnglesPitch() const", 
-        asMETHOD(ScriptEntity, getAnglesPitch), asCALL_THISCALL); assert(r >= 0);
-    r = engine->RegisterObjectMethod("Entity", "float getAnglesYaw() const", 
-        asMETHOD(ScriptEntity, getAnglesYaw), asCALL_THISCALL); assert(r >= 0);
-    r = engine->RegisterObjectMethod("Entity", "float getAnglesRoll() const", 
-        asMETHOD(ScriptEntity, getAnglesRoll), asCALL_THISCALL); assert(r >= 0);
-    r = engine->RegisterObjectMethod("Entity", "void setAngles(float, float, float)", 
-        asMETHOD(ScriptEntity, setAngles), asCALL_THISCALL); assert(r >= 0);
-    
-    // Model
-    r = engine->RegisterObjectMethod("Entity", "int getBspModelIdx() const", 
-        asMETHOD(ScriptEntity, getBspModelIdx), asCALL_THISCALL); assert(r >= 0);
-    r = engine->RegisterObjectMethod("Entity", "bool isBspModel() const", 
-        asMETHOD(ScriptEntity, isBspModel), asCALL_THISCALL); assert(r >= 0);
-    
-    // Key iteration
-    r = engine->RegisterObjectMethod("Entity", "int getKeyCount() const", 
-        asMETHOD(ScriptEntity, getKeyCount), asCALL_THISCALL); assert(r >= 0);
-    r = engine->RegisterObjectMethod("Entity", "string getKeyAt(int) const", 
-        asMETHOD(ScriptEntity, getKeyAt), asCALL_THISCALL); assert(r >= 0);
-    r = engine->RegisterObjectMethod("Entity", "string getValueAt(int) const", 
-        asMETHOD(ScriptEntity, getValueAt), asCALL_THISCALL); assert(r >= 0);
-    
-    // Index
-    r = engine->RegisterObjectMethod("Entity", "int getIndex() const", 
-        asMETHOD(ScriptEntity, getIndex), asCALL_THISCALL); assert(r >= 0);
-    
-    // Validity check
-    r = engine->RegisterObjectMethod("Entity", "bool isValid() const", 
-        asMETHOD(ScriptEntity, isValid), asCALL_THISCALL); assert(r >= 0);
-    
-    // Vec3 methods for origin and angles
-    r = engine->RegisterObjectMethod("Entity", "Vec3 getOrigin() const", 
-        asMETHOD(ScriptEntity, getOrigin), asCALL_THISCALL); assert(r >= 0);
-    r = engine->RegisterObjectMethod("Entity", "void setOriginVec(const Vec3 &in)", 
-        asMETHOD(ScriptEntity, setOriginVec), asCALL_THISCALL); assert(r >= 0);
-    r = engine->RegisterObjectMethod("Entity", "Vec3 getAngles() const", 
-        asMETHOD(ScriptEntity, getAngles), asCALL_THISCALL); assert(r >= 0);
-    r = engine->RegisterObjectMethod("Entity", "void setAnglesVec(const Vec3 &in)", 
-        asMETHOD(ScriptEntity, setAnglesVec), asCALL_THISCALL); assert(r >= 0);
-    
-    // Distance methods
-    r = engine->RegisterObjectMethod("Entity", "float distanceTo(const Entity &in) const", 
-        asMETHOD(ScriptEntity, distanceTo), asCALL_THISCALL); assert(r >= 0);
-    r = engine->RegisterObjectMethod("Entity", "float distanceToPoint(const Vec3 &in) const", 
-        asMETHOD(ScriptEntity, distanceToPoint), asCALL_THISCALL); assert(r >= 0);
 }
 
 // Wrapper functions for global functions (AngelScript requires specific calling convention)
@@ -890,130 +723,6 @@ static int Script_stringToInt(const std::string& str) {
 
 static float Script_stringToFloat(const std::string& str) {
     return (float)std::atof(str.c_str());
-}
-
-void ScriptManager::registerGlobalFunctions() {
-    int r;
-    
-    // ========================================================================
-    // Global functions (no namespace) - Common utilities
-    // ========================================================================
-    
-    // Print functions
-    r = engine->RegisterGlobalFunction("void print(const string &in)", 
-        asFUNCTION(Script_print), asCALL_CDECL); assert(r >= 0);
-    r = engine->RegisterGlobalFunction("void printWarning(const string &in)", 
-        asFUNCTION(Script_printWarning), asCALL_CDECL); assert(r >= 0);
-    r = engine->RegisterGlobalFunction("void printError(const string &in)", 
-        asFUNCTION(Script_printError), asCALL_CDECL); assert(r >= 0);
-    
-    // ========================================================================
-    // Math namespace - Mathematical utilities
-    // ========================================================================
-    r = engine->SetDefaultNamespace("Math"); assert(r >= 0);
-    
-    r = engine->RegisterGlobalFunction("float degToRad(float)", 
-        asFUNCTION(Script_degToRad), asCALL_CDECL); assert(r >= 0);
-    r = engine->RegisterGlobalFunction("float radToDeg(float)", 
-        asFUNCTION(Script_radToDeg), asCALL_CDECL); assert(r >= 0);
-    r = engine->RegisterGlobalFunction("float round(float)", 
-        asFUNCTION(Script_round), asCALL_CDECL); assert(r >= 0);
-    r = engine->RegisterGlobalFunction("float min(float, float)", 
-        asFUNCTION(Script_min), asCALL_CDECL); assert(r >= 0);
-    r = engine->RegisterGlobalFunction("float max(float, float)", 
-        asFUNCTION(Script_max), asCALL_CDECL); assert(r >= 0);
-    r = engine->RegisterGlobalFunction("float clamp(float, float, float)", 
-        asFUNCTION(Script_clamp), asCALL_CDECL); assert(r >= 0);
-    r = engine->RegisterGlobalFunction("float lerp(float, float, float)", 
-        asFUNCTION(Script_lerp), asCALL_CDECL); assert(r >= 0);
-    
-    // ========================================================================
-    // Convert namespace - Type conversions
-    // ========================================================================
-    r = engine->SetDefaultNamespace("Convert"); assert(r >= 0);
-    
-    r = engine->RegisterGlobalFunction("string toString(int)", 
-        asFUNCTION(Script_intToString), asCALL_CDECL); assert(r >= 0);
-    r = engine->RegisterGlobalFunction("string toString(float)", 
-        asFUNCTION(Script_floatToString), asCALL_CDECL); assert(r >= 0);
-    r = engine->RegisterGlobalFunction("int toInt(const string &in)", 
-        asFUNCTION(Script_stringToInt), asCALL_CDECL); assert(r >= 0);
-    r = engine->RegisterGlobalFunction("float toFloat(const string &in)", 
-        asFUNCTION(Script_stringToFloat), asCALL_CDECL); assert(r >= 0);
-    
-    // ========================================================================
-    // Camera namespace - Camera access
-    // ========================================================================
-    r = engine->SetDefaultNamespace("Camera"); assert(r >= 0);
-    
-    r = engine->RegisterGlobalFunction("float getX()", 
-        asFUNCTION(Script_getCameraX), asCALL_CDECL); assert(r >= 0);
-    r = engine->RegisterGlobalFunction("float getY()", 
-        asFUNCTION(Script_getCameraY), asCALL_CDECL); assert(r >= 0);
-    r = engine->RegisterGlobalFunction("float getZ()", 
-        asFUNCTION(Script_getCameraZ), asCALL_CDECL); assert(r >= 0);
-    r = engine->RegisterGlobalFunction("float getPitch()", 
-        asFUNCTION(Script_getCameraPitch), asCALL_CDECL); assert(r >= 0);
-    r = engine->RegisterGlobalFunction("float getYaw()", 
-        asFUNCTION(Script_getCameraYaw), asCALL_CDECL); assert(r >= 0);
-    r = engine->RegisterGlobalFunction("float getRoll()", 
-        asFUNCTION(Script_getCameraRoll), asCALL_CDECL); assert(r >= 0);
-    r = engine->RegisterGlobalFunction("Vec3 getPos()", 
-        asFUNCTION(Script_getCameraPos), asCALL_CDECL); assert(r >= 0);
-    r = engine->RegisterGlobalFunction("Vec3 getAngles()", 
-        asFUNCTION(Script_getCameraAngles), asCALL_CDECL); assert(r >= 0);
-    r = engine->RegisterGlobalFunction("Vec3 getForward()", 
-        asFUNCTION(Script_getCameraForward), asCALL_CDECL); assert(r >= 0);
-    
-    // ========================================================================
-    // Map namespace - Map and entity access
-    // ========================================================================
-    r = engine->SetDefaultNamespace("Map"); assert(r >= 0);
-    
-    r = engine->RegisterGlobalFunction("string getName()", 
-        asFUNCTION(Script_getMapName), asCALL_CDECL); assert(r >= 0);
-    r = engine->RegisterGlobalFunction("int getEntityCount()", 
-        asFUNCTION(Script_getEntityCount), asCALL_CDECL); assert(r >= 0);
-    r = engine->RegisterGlobalFunction("Entity@ getEntity(int)", 
-        asFUNCTION(Script_getEntity), asCALL_CDECL); assert(r >= 0);
-    r = engine->RegisterGlobalFunction("Entity@ findByTargetname(const string &in)", 
-        asFUNCTION(Script_getEntityByTargetname), asCALL_CDECL); assert(r >= 0);
-    r = engine->RegisterGlobalFunction("Entity@ findByClassname(const string &in)", 
-        asFUNCTION(Script_getEntityByClassname), asCALL_CDECL); assert(r >= 0);
-    r = engine->RegisterGlobalFunction("Entity@ createEntity(const string &in)", 
-        asFUNCTION(Script_createEntity), asCALL_CDECL); assert(r >= 0);
-    r = engine->RegisterGlobalFunction("void deleteEntity(int)", 
-        asFUNCTION(Script_deleteEntity), asCALL_CDECL); assert(r >= 0);
-    r = engine->RegisterGlobalFunction("void refresh()", 
-        asFUNCTION(Script_refreshEntities), asCALL_CDECL); assert(r >= 0);
-    
-    // ========================================================================
-    // Editor namespace - Editor operations (undo, selection, etc.)
-    // ========================================================================
-    r = engine->SetDefaultNamespace("Editor"); assert(r >= 0);
-    
-    // Batch operations for undo grouping
-    r = engine->RegisterGlobalFunction("void beginBatch()", 
-        asFUNCTION(Script_beginEntityBatch), asCALL_CDECL); assert(r >= 0);
-    r = engine->RegisterGlobalFunction("void endBatch()", 
-        asFUNCTION(Script_endEntityBatch), asCALL_CDECL); assert(r >= 0);
-    
-    // Selection functions
-    r = engine->RegisterGlobalFunction("array<Entity@>@ getSelectedEntities()", 
-        asFUNCTION(Script_getSelectedEntities), asCALL_CDECL); assert(r >= 0);
-    r = engine->RegisterGlobalFunction("int getSelectedCount()", 
-        asFUNCTION(Script_getSelectedEntityCount), asCALL_CDECL); assert(r >= 0);
-    r = engine->RegisterGlobalFunction("void selectEntity(int)", 
-        asFUNCTION(Script_selectEntity), asCALL_CDECL); assert(r >= 0);
-    r = engine->RegisterGlobalFunction("void deselectEntity(int)", 
-        asFUNCTION(Script_deselectEntity), asCALL_CDECL); assert(r >= 0);
-    r = engine->RegisterGlobalFunction("void deselectAll()", 
-        asFUNCTION(Script_deselectAllEntities), asCALL_CDECL); assert(r >= 0);
-    r = engine->RegisterGlobalFunction("bool isSelected(int)", 
-        asFUNCTION(Script_isEntitySelected), asCALL_CDECL); assert(r >= 0);
-    
-    // Reset namespace to global
-    r = engine->SetDefaultNamespace(""); assert(r >= 0);
 }
 
 void ScriptManager::refreshScriptList() {
@@ -1415,7 +1124,7 @@ void ScriptManager::refreshEntityDisplay() {
     
     // Refresh the entity rendering
     if (app && app->mapRenderer) {
-        for (int i = 0; i < (int)map->ents.size(); i++) {
+        for (int i = 0; i < map->ents.size(); i++) {
             app->mapRenderer->refreshEnt(i);
 		}
 	}
@@ -1614,4 +1323,499 @@ bool ScriptManager::isEntitySelected(int index) const {
     }
     
     return app->pickInfo.isEntSelected(index);
+}
+
+// ==========================================
+// Extension method for array filtering (similar to LINQ's Where in C#)
+// ==========================================
+
+CScriptArray* ArrayWhere(asIScriptFunction* func, CScriptArray* arr)
+{
+    asIScriptEngine* engine = arr->GetArrayObjectType()->GetEngine();
+    CScriptArray* result = CScriptArray::Create(arr->GetArrayObjectType());
+
+    if (func == 0 || arr->GetSize() == 0) return result;
+
+    asIScriptContext* cmpContext = 0;
+    bool isNested = false;
+
+    cmpContext = asGetActiveContext();
+    if (cmpContext) {
+        if (cmpContext->GetEngine() == engine && cmpContext->PushState() >= 0)
+            isNested = true;
+        else
+            cmpContext = 0;
+    }
+
+    if (cmpContext == 0) cmpContext = engine->RequestContext();
+
+    for (asUINT i = 0; i < arr->GetSize(); i++) {
+        cmpContext->Prepare(func);
+        cmpContext->SetArgAddress(0, const_cast<void*>(arr->At(i)));
+        int r = cmpContext->Execute();
+
+        if (r != asEXECUTION_FINISHED) break;
+
+        if (*(bool*)(cmpContext->GetAddressOfReturnValue())) {
+            result->InsertLast(const_cast<void*>(arr->At(i)));
+        }
+    }
+
+    if (cmpContext) {
+        if (isNested) {
+            asEContextState state = cmpContext->GetState();
+            cmpContext->PopState();
+            if (state == asEXECUTION_ABORTED) cmpContext->Abort();
+        }
+        else {
+            engine->ReturnContext(cmpContext);
+        }
+    }
+    return result;
+}
+
+int ArrayFirstIndex(asIScriptFunction* func, CScriptArray* arr)
+{
+    if (func == 0 || arr->GetSize() == 0) return -1;
+
+    asIScriptEngine* engine = arr->GetArrayObjectType()->GetEngine();
+    asIScriptContext* cmpContext = 0;
+    bool isNested = false;
+
+    cmpContext = asGetActiveContext();
+    if (cmpContext) {
+        if (cmpContext->GetEngine() == engine && cmpContext->PushState() >= 0)
+            isNested = true;
+        else
+            cmpContext = 0;
+    }
+
+    if (cmpContext == 0) cmpContext = engine->RequestContext();
+
+    int matchIndex = -1;
+
+    for (asUINT i = 0; i < arr->GetSize(); i++) {
+        cmpContext->Prepare(func);
+        cmpContext->SetArgAddress(0, const_cast<void*>(arr->At(i)));
+        int r = cmpContext->Execute();
+
+        if (r != asEXECUTION_FINISHED) break;
+
+        if (*(bool*)(cmpContext->GetAddressOfReturnValue())) {
+            matchIndex = i;
+            break;
+        }
+    }
+
+    if (cmpContext) {
+        if (isNested) {
+            asEContextState state = cmpContext->GetState();
+            cmpContext->PopState();
+            if (state == asEXECUTION_ABORTED) cmpContext->Abort();
+        }
+        else {
+            engine->ReturnContext(cmpContext);
+        }
+    }
+    return matchIndex;
+}
+
+void* ArrayFirst(asIScriptFunction* func, CScriptArray* arr)
+{
+    int idx = ArrayFirstIndex(func, arr);
+
+    if (idx >= 0) {
+        return const_cast<void*>(arr->At(idx));
+    }
+
+    asIScriptContext* ctx = asGetActiveContext();
+    if (ctx) {
+        ctx->SetException("Sequence contains no matching element");
+    }
+    return 0;
+}
+
+void ScriptManager::registerTypes() {
+    int r;
+
+    // ========================================================================
+    // Core Types - Basic engine entity structures
+    // ========================================================================
+
+    // Register ScriptEntity as a reference type
+    r = engine->RegisterObjectType("Entity", 0, asOBJ_REF); assert(r >= 0);
+
+    // Register reference counting behaviors for Entity
+    r = engine->RegisterObjectBehaviour("Entity", asBEHAVE_ADDREF, "void f()",
+        asMETHOD(ScriptEntity, addRef), asCALL_THISCALL); assert(r >= 0);
+    r = engine->RegisterObjectBehaviour("Entity", asBEHAVE_RELEASE, "void f()",
+        asMETHOD(ScriptEntity, release), asCALL_THISCALL); assert(r >= 0);
+}
+
+void ScriptManager::registerMathTypes() {
+    int r;
+
+    // ========================================================================
+    // Vec3 Type - 3D Vector representation and operations
+    // ========================================================================
+
+    // Register Vec3 as a value type
+    r = engine->RegisterObjectType("Vec3", sizeof(ScriptVec3), asOBJ_VALUE | asOBJ_POD | asGetTypeTraits<ScriptVec3>()); assert(r >= 0);
+
+    // Register Vec3 constructors
+    r = engine->RegisterObjectBehaviour("Vec3", asBEHAVE_CONSTRUCT, "void f()",
+        asFUNCTIONPR([](void* mem) { new(mem) ScriptVec3(); }, (void*), void), asCALL_CDECL_OBJFIRST); assert(r >= 0);
+    r = engine->RegisterObjectBehaviour("Vec3", asBEHAVE_CONSTRUCT, "void f(float, float, float)",
+        asFUNCTIONPR([](void* mem, float x, float y, float z) { new(mem) ScriptVec3(x, y, z); }, (void*, float, float, float), void), asCALL_CDECL_OBJFIRST); assert(r >= 0);
+    r = engine->RegisterObjectBehaviour("Vec3", asBEHAVE_CONSTRUCT, "void f(const Vec3 &in)",
+        asFUNCTIONPR([](void* mem, const ScriptVec3& other) { new(mem) ScriptVec3(other); }, (void*, const ScriptVec3&), void), asCALL_CDECL_OBJFIRST); assert(r >= 0);
+
+    // Register Vec3 properties
+    r = engine->RegisterObjectProperty("Vec3", "float x", asOFFSET(ScriptVec3, x)); assert(r >= 0);
+    r = engine->RegisterObjectProperty("Vec3", "float y", asOFFSET(ScriptVec3, y)); assert(r >= 0);
+    r = engine->RegisterObjectProperty("Vec3", "float z", asOFFSET(ScriptVec3, z)); assert(r >= 0);
+
+    // Register Vec3 math operators
+    r = engine->RegisterObjectMethod("Vec3", "Vec3 &opAssign(const Vec3 &in)", asMETHOD(ScriptVec3, operator=), asCALL_THISCALL); assert(r >= 0);
+    r = engine->RegisterObjectMethod("Vec3", "Vec3 opAdd(const Vec3 &in) const", asMETHODPR(ScriptVec3, operator+, (const ScriptVec3&) const, ScriptVec3), asCALL_THISCALL); assert(r >= 0);
+    r = engine->RegisterObjectMethod("Vec3", "Vec3 opSub(const Vec3 &in) const", asMETHODPR(ScriptVec3, operator-, (const ScriptVec3&) const, ScriptVec3), asCALL_THISCALL); assert(r >= 0);
+    r = engine->RegisterObjectMethod("Vec3", "Vec3 opMul(float) const", asMETHODPR(ScriptVec3, operator*, (float) const, ScriptVec3), asCALL_THISCALL); assert(r >= 0);
+    r = engine->RegisterObjectMethod("Vec3", "Vec3 opDiv(float) const", asMETHODPR(ScriptVec3, operator/, (float) const, ScriptVec3), asCALL_THISCALL); assert(r >= 0);
+    r = engine->RegisterObjectMethod("Vec3", "Vec3 opNeg() const", asMETHODPR(ScriptVec3, operator-, () const, ScriptVec3), asCALL_THISCALL); assert(r >= 0);
+    r = engine->RegisterObjectMethod("Vec3", "bool opEquals(const Vec3 &in) const", asMETHOD(ScriptVec3, operator==), asCALL_THISCALL); assert(r >= 0);
+    r = engine->RegisterObjectMethod("Vec3", "Vec3 &opAddAssign(const Vec3 &in)", asMETHOD(ScriptVec3, operator+=), asCALL_THISCALL); assert(r >= 0);
+    r = engine->RegisterObjectMethod("Vec3", "Vec3 &opSubAssign(const Vec3 &in)", asMETHOD(ScriptVec3, operator-=), asCALL_THISCALL); assert(r >= 0);
+    r = engine->RegisterObjectMethod("Vec3", "Vec3 &opMulAssign(float)", asMETHODPR(ScriptVec3, operator*=, (float), ScriptVec3&), asCALL_THISCALL); assert(r >= 0);
+    r = engine->RegisterObjectMethod("Vec3", "Vec3 &opDivAssign(float)", asMETHODPR(ScriptVec3, operator/=, (float), ScriptVec3&), asCALL_THISCALL); assert(r >= 0);
+
+    // Register Vec3 utility methods
+    r = engine->RegisterObjectMethod("Vec3", "float length() const", asMETHOD(ScriptVec3, length), asCALL_THISCALL); assert(r >= 0);
+    r = engine->RegisterObjectMethod("Vec3", "float lengthSq() const", asMETHOD(ScriptVec3, lengthSq), asCALL_THISCALL); assert(r >= 0);
+    r = engine->RegisterObjectMethod("Vec3", "float dot(const Vec3 &in) const", asMETHOD(ScriptVec3, dot), asCALL_THISCALL); assert(r >= 0);
+    r = engine->RegisterObjectMethod("Vec3", "Vec3 cross(const Vec3 &in) const", asMETHOD(ScriptVec3, cross), asCALL_THISCALL); assert(r >= 0);
+    r = engine->RegisterObjectMethod("Vec3", "Vec3 normalized() const", asMETHOD(ScriptVec3, normalized), asCALL_THISCALL); assert(r >= 0);
+    r = engine->RegisterObjectMethod("Vec3", "void normalize()", asMETHOD(ScriptVec3, normalize), asCALL_THISCALL); assert(r >= 0);
+    r = engine->RegisterObjectMethod("Vec3", "float distance(const Vec3 &in) const", asMETHOD(ScriptVec3, distance), asCALL_THISCALL); assert(r >= 0);
+    r = engine->RegisterObjectMethod("Vec3", "Vec3 lerp(const Vec3 &in, float) const", asMETHOD(ScriptVec3, lerp), asCALL_THISCALL); assert(r >= 0);
+    r = engine->RegisterObjectMethod("Vec3", "string toString() const", asMETHOD(ScriptVec3, toString), asCALL_THISCALL); assert(r >= 0);
+
+    // Set namespace to Vec3 for static factories
+    r = engine->SetDefaultNamespace("Vec3"); assert(r >= 0);
+
+    // Register Vec3 static factory functions
+    r = engine->RegisterGlobalFunction("Vec3 fromString(const string &in)", asFUNCTION(ScriptVec3::fromString), asCALL_CDECL); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("Vec3 zero()", asFUNCTION(ScriptVec3::zero), asCALL_CDECL); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("Vec3 one()", asFUNCTION(ScriptVec3::one), asCALL_CDECL); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("Vec3 up()", asFUNCTION(ScriptVec3::up), asCALL_CDECL); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("Vec3 forward()", asFUNCTION(ScriptVec3::forward), asCALL_CDECL); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("Vec3 right()", asFUNCTION(ScriptVec3::right), asCALL_CDECL); assert(r >= 0);
+
+    // Reset namespace to global
+    r = engine->SetDefaultNamespace(""); assert(r >= 0);
+
+    // ========================================================================
+    // RGB Type - Color representation and operations
+    // ========================================================================
+
+    // Register RGB as a value type
+    r = engine->RegisterObjectType("RGB", sizeof(ScriptRGB), asOBJ_VALUE | asOBJ_POD | asGetTypeTraits<ScriptRGB>()); assert(r >= 0);
+
+    // Register RGB constructors
+    r = engine->RegisterObjectBehaviour("RGB", asBEHAVE_CONSTRUCT, "void f()",
+        asFUNCTIONPR([](void* mem) { new(mem) ScriptRGB(); }, (void*), void), asCALL_CDECL_OBJFIRST); assert(r >= 0);
+    r = engine->RegisterObjectBehaviour("RGB", asBEHAVE_CONSTRUCT, "void f(int, int, int)",
+        asFUNCTIONPR([](void* mem, int r, int g, int b) { new(mem) ScriptRGB(r, g, b); }, (void*, int, int, int), void), asCALL_CDECL_OBJFIRST); assert(r >= 0);
+    r = engine->RegisterObjectBehaviour("RGB", asBEHAVE_CONSTRUCT, "void f(const RGB &in)",
+        asFUNCTIONPR([](void* mem, const ScriptRGB& other) { new(mem) ScriptRGB(other); }, (void*, const ScriptRGB&), void), asCALL_CDECL_OBJFIRST); assert(r >= 0);
+
+    // Register RGB properties
+    r = engine->RegisterObjectProperty("RGB", "int r", asOFFSET(ScriptRGB, r)); assert(r >= 0);
+    r = engine->RegisterObjectProperty("RGB", "int g", asOFFSET(ScriptRGB, g)); assert(r >= 0);
+    r = engine->RegisterObjectProperty("RGB", "int b", asOFFSET(ScriptRGB, b)); assert(r >= 0);
+
+    // Register RGB operators
+    r = engine->RegisterObjectMethod("RGB", "RGB &opAssign(const RGB &in)", asMETHOD(ScriptRGB, operator=), asCALL_THISCALL); assert(r >= 0);
+    r = engine->RegisterObjectMethod("RGB", "bool opEquals(const RGB &in) const", asMETHOD(ScriptRGB, operator==), asCALL_THISCALL); assert(r >= 0);
+
+    // Register RGB utility methods
+    r = engine->RegisterObjectMethod("RGB", "RGB lerp(const RGB &in, float) const", asMETHOD(ScriptRGB, lerp), asCALL_THISCALL); assert(r >= 0);
+    r = engine->RegisterObjectMethod("RGB", "void clamp()", asMETHOD(ScriptRGB, clamp), asCALL_THISCALL); assert(r >= 0);
+    r = engine->RegisterObjectMethod("RGB", "string toString() const", asMETHOD(ScriptRGB, toString), asCALL_THISCALL); assert(r >= 0);
+    r = engine->RegisterObjectMethod("RGB", "string toLightString() const", asMETHOD(ScriptRGB, toLightString), asCALL_THISCALL); assert(r >= 0);
+
+    // Set namespace to RGB for static factories
+    r = engine->SetDefaultNamespace("RGB"); assert(r >= 0);
+
+    // Register RGB static factory functions
+    r = engine->RegisterGlobalFunction("RGB fromString(const string &in)", asFUNCTION(ScriptRGB::fromString), asCALL_CDECL); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("RGB white()", asFUNCTION(ScriptRGB::white), asCALL_CDECL); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("RGB black()", asFUNCTION(ScriptRGB::black), asCALL_CDECL); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("RGB red()", asFUNCTION(ScriptRGB::red), asCALL_CDECL); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("RGB green()", asFUNCTION(ScriptRGB::green), asCALL_CDECL); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("RGB blue()", asFUNCTION(ScriptRGB::blue), asCALL_CDECL); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("RGB yellow()", asFUNCTION(ScriptRGB::yellow), asCALL_CDECL); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("RGB cyan()", asFUNCTION(ScriptRGB::cyan), asCALL_CDECL); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("RGB magenta()", asFUNCTION(ScriptRGB::magenta), asCALL_CDECL); assert(r >= 0);
+
+    // Reset namespace to global
+    r = engine->SetDefaultNamespace(""); assert(r >= 0);
+
+    // ========================================================================
+    // Math Namespace - Math utilities and formulas
+    // ========================================================================
+
+    // Set namespace to Math
+    r = engine->SetDefaultNamespace("Math"); assert(r >= 0);
+
+    // Register general math functions
+    r = engine->RegisterGlobalFunction("float degToRad(float)",
+        asFUNCTION(Script_degToRad), asCALL_CDECL); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("float radToDeg(float)",
+        asFUNCTION(Script_radToDeg), asCALL_CDECL); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("float round(float)",
+        asFUNCTION(Script_round), asCALL_CDECL); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("float min(float, float)",
+        asFUNCTION(Script_min), asCALL_CDECL); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("float max(float, float)",
+        asFUNCTION(Script_max), asCALL_CDECL); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("float clamp(float, float, float)",
+        asFUNCTION(Script_clamp), asCALL_CDECL); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("float lerp(float, float, float)",
+        asFUNCTION(Script_lerp), asCALL_CDECL); assert(r >= 0);
+
+    // Reset namespace to global
+    r = engine->SetDefaultNamespace(""); assert(r >= 0);
+}
+
+void ScriptManager::registerGlobalFunctions() {
+    int r;
+
+    // ========================================================================
+    // Global Functions - Common engine utilities
+    // ========================================================================
+
+    // Register basic print functions
+    r = engine->RegisterGlobalFunction("void print(const string &in)",
+        asFUNCTION(Script_print), asCALL_CDECL); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("void printWarning(const string &in)",
+        asFUNCTION(Script_printWarning), asCALL_CDECL); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("void printError(const string &in)",
+        asFUNCTION(Script_printError), asCALL_CDECL); assert(r >= 0);
+
+    // ========================================================================
+    // Convert Namespace - Type conversions
+    // ========================================================================
+
+    // Set namespace to Convert
+    r = engine->SetDefaultNamespace("Convert"); assert(r >= 0);
+
+    // Register string to number and number to string converters
+    r = engine->RegisterGlobalFunction("string toString(int)",
+        asFUNCTION(Script_intToString), asCALL_CDECL); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("string toString(float)",
+        asFUNCTION(Script_floatToString), asCALL_CDECL); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("int toInt(const string &in)",
+        asFUNCTION(Script_stringToInt), asCALL_CDECL); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("float toFloat(const string &in)",
+        asFUNCTION(Script_stringToFloat), asCALL_CDECL); assert(r >= 0);
+
+    // Reset namespace to global
+    r = engine->SetDefaultNamespace(""); assert(r >= 0);
+
+    // ========================================================================
+    // Camera Namespace - Viewport camera access
+    // ========================================================================
+
+    // Set namespace to Camera
+    r = engine->SetDefaultNamespace("Camera"); assert(r >= 0);
+
+    // Register individual camera coordinate getters
+    r = engine->RegisterGlobalFunction("float getX()",
+        asFUNCTION(Script_getCameraX), asCALL_CDECL); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("float getY()",
+        asFUNCTION(Script_getCameraY), asCALL_CDECL); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("float getZ()",
+        asFUNCTION(Script_getCameraZ), asCALL_CDECL); assert(r >= 0);
+
+    // Register individual camera rotation getters
+    r = engine->RegisterGlobalFunction("float getPitch()",
+        asFUNCTION(Script_getCameraPitch), asCALL_CDECL); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("float getYaw()",
+        asFUNCTION(Script_getCameraYaw), asCALL_CDECL); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("float getRoll()",
+        asFUNCTION(Script_getCameraRoll), asCALL_CDECL); assert(r >= 0);
+
+    // Register Vec3 camera getters
+    r = engine->RegisterGlobalFunction("Vec3 getPos()",
+        asFUNCTION(Script_getCameraPos), asCALL_CDECL); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("Vec3 getAngles()",
+        asFUNCTION(Script_getCameraAngles), asCALL_CDECL); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("Vec3 getForward()",
+        asFUNCTION(Script_getCameraForward), asCALL_CDECL); assert(r >= 0);
+
+    // Reset namespace to global
+    r = engine->SetDefaultNamespace(""); assert(r >= 0);
+
+    // ========================================================================
+    // Map Namespace - Global map and entity management
+    // ========================================================================
+
+    // Set namespace to Map
+    r = engine->SetDefaultNamespace("Map"); assert(r >= 0);
+
+    // Register general map properties
+    r = engine->RegisterGlobalFunction("string getName()",
+        asFUNCTION(Script_getMapName), asCALL_CDECL); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("int getEntityCount()",
+        asFUNCTION(Script_getEntityCount), asCALL_CDECL); assert(r >= 0);
+
+    // Register entity lookup functions
+    r = engine->RegisterGlobalFunction("Entity@ getEntity(int)",
+        asFUNCTION(Script_getEntity), asCALL_CDECL); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("Entity@ findByTargetname(const string &in)",
+        asFUNCTION(Script_getEntityByTargetname), asCALL_CDECL); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("Entity@ findByClassname(const string &in)",
+        asFUNCTION(Script_getEntityByClassname), asCALL_CDECL); assert(r >= 0);
+
+    // Register entity lifecycle functions
+    r = engine->RegisterGlobalFunction("Entity@ createEntity(const string &in)",
+        asFUNCTION(Script_createEntity), asCALL_CDECL); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("void deleteEntity(int)",
+        asFUNCTION(Script_deleteEntity), asCALL_CDECL); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("void refresh()",
+        asFUNCTION(Script_refreshEntities), asCALL_CDECL); assert(r >= 0);
+
+    // Reset namespace to global
+    r = engine->SetDefaultNamespace(""); assert(r >= 0);
+
+    // ========================================================================
+    // Editor Namespace - Undo, selection, and tools
+    // ========================================================================
+
+    // Set namespace to Editor
+    r = engine->SetDefaultNamespace("Editor"); assert(r >= 0);
+
+    // Register batch operations for undo grouping
+    r = engine->RegisterGlobalFunction("void beginBatch()",
+        asFUNCTION(Script_beginEntityBatch), asCALL_CDECL); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("void endBatch()",
+        asFUNCTION(Script_endEntityBatch), asCALL_CDECL); assert(r >= 0);
+
+    // Register entity selection tools
+    r = engine->RegisterGlobalFunction("array<Entity@>@ getSelectedEntities()",
+        asFUNCTION(Script_getSelectedEntities), asCALL_CDECL); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("int getSelectedCount()",
+        asFUNCTION(Script_getSelectedEntityCount), asCALL_CDECL); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("void selectEntity(int)",
+        asFUNCTION(Script_selectEntity), asCALL_CDECL); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("void deselectEntity(int)",
+        asFUNCTION(Script_deselectEntity), asCALL_CDECL); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("void deselectAll()",
+        asFUNCTION(Script_deselectAllEntities), asCALL_CDECL); assert(r >= 0);
+    r = engine->RegisterGlobalFunction("bool isSelected(int)",
+        asFUNCTION(Script_isEntitySelected), asCALL_CDECL); assert(r >= 0);
+
+    // Reset namespace to global
+    r = engine->SetDefaultNamespace(""); assert(r >= 0);
+}
+
+void ScriptManager::registerEntityMethods() {
+    int r;
+
+    // ========================================================================
+    // Entity Methods - Manipulation and data access for Map Entities
+    // ========================================================================
+
+    // Register raw Keyvalue string manipulation methods
+    r = engine->RegisterObjectMethod("Entity", "string getKeyvalue(const string &in) const",
+        asMETHOD(ScriptEntity, getKeyvalue), asCALL_THISCALL); assert(r >= 0);
+    r = engine->RegisterObjectMethod("Entity", "void setKeyvalue(const string &in, const string &in)",
+        asMETHOD(ScriptEntity, setKeyvalue), asCALL_THISCALL); assert(r >= 0);
+    r = engine->RegisterObjectMethod("Entity", "bool hasKey(const string &in) const",
+        asMETHOD(ScriptEntity, hasKey), asCALL_THISCALL); assert(r >= 0);
+    r = engine->RegisterObjectMethod("Entity", "void removeKeyvalue(const string &in)",
+        asMETHOD(ScriptEntity, removeKeyvalue), asCALL_THISCALL); assert(r >= 0);
+
+    // Register quick accessors for common keyvalues
+    r = engine->RegisterObjectMethod("Entity", "string getClassname() const",
+        asMETHOD(ScriptEntity, getClassname), asCALL_THISCALL); assert(r >= 0);
+    r = engine->RegisterObjectMethod("Entity", "string getTargetname() const",
+        asMETHOD(ScriptEntity, getTargetname), asCALL_THISCALL); assert(r >= 0);
+
+    // Register individual coordinate accessors
+    r = engine->RegisterObjectMethod("Entity", "float getOriginX() const",
+        asMETHOD(ScriptEntity, getOriginX), asCALL_THISCALL); assert(r >= 0);
+    r = engine->RegisterObjectMethod("Entity", "float getOriginY() const",
+        asMETHOD(ScriptEntity, getOriginY), asCALL_THISCALL); assert(r >= 0);
+    r = engine->RegisterObjectMethod("Entity", "float getOriginZ() const",
+        asMETHOD(ScriptEntity, getOriginZ), asCALL_THISCALL); assert(r >= 0);
+    r = engine->RegisterObjectMethod("Entity", "void setOrigin(float, float, float)",
+        asMETHOD(ScriptEntity, setOrigin), asCALL_THISCALL); assert(r >= 0);
+
+    // Register individual angle accessors
+    r = engine->RegisterObjectMethod("Entity", "float getAnglesPitch() const",
+        asMETHOD(ScriptEntity, getAnglesPitch), asCALL_THISCALL); assert(r >= 0);
+    r = engine->RegisterObjectMethod("Entity", "float getAnglesYaw() const",
+        asMETHOD(ScriptEntity, getAnglesYaw), asCALL_THISCALL); assert(r >= 0);
+    r = engine->RegisterObjectMethod("Entity", "float getAnglesRoll() const",
+        asMETHOD(ScriptEntity, getAnglesRoll), asCALL_THISCALL); assert(r >= 0);
+    r = engine->RegisterObjectMethod("Entity", "void setAngles(float, float, float)",
+        asMETHOD(ScriptEntity, setAngles), asCALL_THISCALL); assert(r >= 0);
+
+    // Register BSP model related methods
+    r = engine->RegisterObjectMethod("Entity", "int getBspModelIdx() const",
+        asMETHOD(ScriptEntity, getBspModelIdx), asCALL_THISCALL); assert(r >= 0);
+    r = engine->RegisterObjectMethod("Entity", "bool isBspModel() const",
+        asMETHOD(ScriptEntity, isBspModel), asCALL_THISCALL); assert(r >= 0);
+
+    // Register keyvalue iteration tools
+    r = engine->RegisterObjectMethod("Entity", "int getKeyCount() const",
+        asMETHOD(ScriptEntity, getKeyCount), asCALL_THISCALL); assert(r >= 0);
+    r = engine->RegisterObjectMethod("Entity", "string getKeyAt(int) const",
+        asMETHOD(ScriptEntity, getKeyAt), asCALL_THISCALL); assert(r >= 0);
+    r = engine->RegisterObjectMethod("Entity", "string getValueAt(int) const",
+        asMETHOD(ScriptEntity, getValueAt), asCALL_THISCALL); assert(r >= 0);
+
+    // Register internal identification methods
+    r = engine->RegisterObjectMethod("Entity", "int getIndex() const",
+        asMETHOD(ScriptEntity, getIndex), asCALL_THISCALL); assert(r >= 0);
+    r = engine->RegisterObjectMethod("Entity", "bool isValid() const",
+        asMETHOD(ScriptEntity, isValid), asCALL_THISCALL); assert(r >= 0);
+
+    // Register Vec3 based getters and setters
+    r = engine->RegisterObjectMethod("Entity", "Vec3 getOrigin() const",
+        asMETHOD(ScriptEntity, getOrigin), asCALL_THISCALL); assert(r >= 0);
+    r = engine->RegisterObjectMethod("Entity", "void setOriginVec(const Vec3 &in)",
+        asMETHOD(ScriptEntity, setOriginVec), asCALL_THISCALL); assert(r >= 0);
+    r = engine->RegisterObjectMethod("Entity", "Vec3 getAngles() const",
+        asMETHOD(ScriptEntity, getAngles), asCALL_THISCALL); assert(r >= 0);
+    r = engine->RegisterObjectMethod("Entity", "void setAnglesVec(const Vec3 &in)",
+        asMETHOD(ScriptEntity, setAnglesVec), asCALL_THISCALL); assert(r >= 0);
+
+    // Register spatial calculation methods
+    r = engine->RegisterObjectMethod("Entity", "float distanceTo(const Entity &in) const",
+        asMETHOD(ScriptEntity, distanceTo), asCALL_THISCALL); assert(r >= 0);
+    r = engine->RegisterObjectMethod("Entity", "float distanceToPoint(const Vec3 &in) const",
+        asMETHOD(ScriptEntity, distanceToPoint), asCALL_THISCALL); assert(r >= 0);
+}
+
+void ScriptManager::registerArrayExtensions() {
+    int r;
+
+    // ========================================================================
+    // Array Extensions - Higher-order functions for filtering and searching
+    // ========================================================================
+
+    assert(engine->GetTypeInfoByDecl("array<T>") != 0 && "ERROR: You must call RegisterScriptArray before calling registerArrayExtensions!");
+
+    // Register a generic function definition for the filter callbacks
+    r = engine->RegisterFuncdef("bool array<T>::filter(const T&in if_handle_then_const)"); assert(r >= 0);
+
+    // Register LINQ-style array methods
+    r = engine->RegisterObjectMethod("array<T>", "array<T>@ Where(const filter &in) const",
+        asFUNCTION(ArrayWhere), asCALL_CDECL_OBJLAST); assert(r >= 0);
+    r = engine->RegisterObjectMethod("array<T>", "int FirstIndex(const filter &in) const",
+        asFUNCTION(ArrayFirstIndex), asCALL_CDECL_OBJLAST); assert(r >= 0);
+    r = engine->RegisterObjectMethod("array<T>", "T& First(const filter &in) const",
+        asFUNCTION(ArrayFirst), asCALL_CDECL_OBJLAST); assert(r >= 0);
 }

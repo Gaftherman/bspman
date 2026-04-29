@@ -264,6 +264,7 @@ private:
     void registerEntityMethods();
     void registerGlobalFunctions();
     void registerMathTypes();
+    void registerArrayExtensions();
     
     // AngelScript callbacks
     static void messageCallback(const asSMessageInfo* msg, void* param);
