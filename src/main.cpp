@@ -99,6 +99,7 @@
 const char* g_version_string = "bspguy v6 WIP (September 2025)";
 
 bool g_verbose = false;
+bool g_dumpingApi = false;
 
 // remove unused data before modifying anything to avoid misleading results
 void remove_unused_data(Bsp* map) {
@@ -981,6 +982,23 @@ int main(int argc, char* argv[])
 
 	if (cli.command == "version" || cli.command == "--version" || cli.command == "-version" || cli.command == "-v") {
 		logf(g_version_string);
+		return 0;
+	}
+
+	if (cli.command == "-dumpapi" || cli.hasOption("-dumpapi")) {
+
+		Bsp* dummyMap = new Bsp();
+		g_scriptManager = new ScriptManager();
+		bool init = g_scriptManager->initCLI(dummyMap);
+
+		if (init) {
+			g_scriptManager->generateScriptPredefined("as.predefined");
+		}
+
+		delete g_scriptManager;
+		g_scriptManager = nullptr;
+		delete dummyMap;
+
 		return 0;
 	}
 

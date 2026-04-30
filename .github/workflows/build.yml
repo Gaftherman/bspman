@@ -23,11 +23,19 @@ jobs:
         cmake ..
         cmake --build . --config Release
 
+    - name: Generate AngelScript API (as.predefined)
+      run: |
+        cd build\Release
+        .\bspguy.exe -dumpapi
+      shell: cmd
+
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
         name: bspguy-windows
-        path: build/Release
+        path: |
+          build/Release/bspguy.exe
+          build/Release/as.predefined
 
   build-linux:
     runs-on: ubuntu-24.04
@@ -40,19 +48,27 @@ jobs:
     
     - name: Download and install dependencies
       run: |
-        sudo apt install libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libglfw3-dev libglew-dev libxxf86vm-dev
+        sudo apt update
+        sudo apt install -y libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libglfw3-dev libglew-dev libxxf86vm-dev
 
     - name: Build release
       run: |
-        mkdir build; cd build
+        mkdir build && cd build
         cmake .. -DCMAKE_BUILD_TYPE=RELEASE
         make
+
+    - name: Generate AngelScript API (as.predefined)
+      run: |
+        cd build
+        ./bspguy -dumpapi
 
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
         name: bspguy-linux
-        path: build/bspguy
+        path: |
+          build/bspguy
+          build/as.predefined
 
   create-release:
     name: Create GitHub Release
@@ -78,8 +94,8 @@ jobs:
 
       - name: Zip Artifacts
         run: |
-          zip -r bspguy-windows.zip bspguy-windows
-          zip -r bspguy-linux.zip bspguy-linux
+          cd bspguy-windows && zip -r ../bspguy-windows.zip . && cd ..
+          cd bspguy-linux && zip -r ../bspguy-linux.zip . && cd ..
 
       - name: Publish Release
         uses: softprops/action-gh-release@v2

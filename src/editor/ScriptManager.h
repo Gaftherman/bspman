@@ -233,7 +233,10 @@ public:
     // Math utility functions
     static float degToRad(float degrees);
     static float radToDeg(float radians);
-    
+
+    // Angelscript predefined generator
+    void generateScriptPredefined(const std::string& path);
+
 private:
     asIScriptEngine* engine;
     asIScriptContext* context;

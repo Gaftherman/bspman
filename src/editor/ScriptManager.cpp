@@ -1904,3 +1904,115 @@ void ScriptManager::registerArrayExtensions() {
     r = engine->RegisterObjectMethod("array<T>", "T& Last(const filter &in) const",
         asFUNCTION(ArrayLast), asCALL_CDECL_OBJLAST); assert(r >= 0);
 }
+
+void ScriptManager::generateScriptPredefined(const std::string& path) {
+    std::ofstream stream(path);
+    if (!stream.is_open()) return;
+
+    stream << "// ========================================================================\n";
+    stream << "// BSPGUY ANGELSCRIPT API (AUTO-GENERATED)\n";
+    stream << "// ========================================================================\n\n";
+
+    auto SafeStr = [](const char* str) -> std::string {
+        return str ? str : "/* anonymous */";
+        };
+
+    // 1. Enums
+    for (int i = 0; i < engine->GetEnumCount(); i++) {
+        const auto e = engine->GetEnumByIndex(i);
+        if (!e) continue;
+        std::string ns = SafeStr(e->GetNamespace());
+        if (!ns.empty()) stream << "namespace " << ns << " {\n";
+        stream << "enum " << SafeStr(e->GetName()) << " {\n";
+        for (int j = 0; j < e->GetEnumValueCount(); ++j) {
+            stream << "\t" << SafeStr(e->GetEnumValueByIndex(j, nullptr));
+            if (j < e->GetEnumValueCount() - 1) stream << ",";
+            stream << "\n";
+        }
+        stream << "}\n";
+        if (!ns.empty()) stream << "}\n";
+    }
+
+    for (int i = 0; i < engine->GetObjectTypeCount(); i++) {
+        const auto t = engine->GetObjectTypeByIndex(i);
+        if (!t) continue;
+
+        std::string name = SafeStr(t->GetName());
+        if (name == "/* anonymous */" || name.find("$") != std::string::npos) continue;
+
+        std::string ns = SafeStr(t->GetNamespace());
+        if (!ns.empty()) stream << "namespace " << ns << " {\n";
+
+        stream << "class " << name;
+        if (t->GetSubTypeCount() > 0) {
+            stream << "<";
+            for (asUINT sub = 0; sub < t->GetSubTypeCount(); ++sub) {
+                if (sub > 0) stream << ", ";
+                stream << SafeStr(engine->GetTypeDeclaration(t->GetSubTypeId(sub), true));
+            }
+            stream << ">";
+        }
+        stream << " {\n";
+
+        for (asUINT j = 0; j < t->GetBehaviourCount(); ++j) {
+            asEBehaviours behaviours;
+            const auto f = t->GetBehaviourByIndex(j, &behaviours);
+            if (f && (behaviours == asBEHAVE_CONSTRUCT || behaviours == asBEHAVE_DESTRUCT)) {
+                stream << "\t" << SafeStr(f->GetDeclaration(false, true, true)) << ";\n";
+            }
+        }
+        for (asUINT j = 0; j < t->GetMethodCount(); ++j) {
+            const auto m = t->GetMethodByIndex(j);
+            if (m) stream << "\t" << SafeStr(m->GetDeclaration(false, true, true)) << ";\n";
+        }
+        for (asUINT j = 0; j < t->GetPropertyCount(); ++j) {
+            stream << "\t" << SafeStr(t->GetPropertyDeclaration(j, true)) << ";\n";
+        }
+        for (asUINT j = 0; j < t->GetChildFuncdefCount(); ++j) {
+            auto funcdef = t->GetChildFuncdef(j);
+            if (funcdef && funcdef->GetFuncdefSignature()) {
+                stream << "\tfuncdef " << SafeStr(funcdef->GetFuncdefSignature()->GetDeclaration(false, false, false)) << ";\n";
+            }
+        }
+        stream << "}\n";
+        if (!ns.empty()) stream << "}\n";
+    }
+
+    std::map<std::string, std::vector<std::string>> groupedFunctions;
+
+    for (int i = 0; i < engine->GetGlobalFunctionCount(); i++) {
+        const auto f = engine->GetGlobalFunctionByIndex(i);
+        if (!f) continue;
+        std::string ns = SafeStr(f->GetNamespace());
+        groupedFunctions[ns].push_back(SafeStr(f->GetDeclaration(false, false, true)));
+    }
+
+    for (const auto& group : groupedFunctions) {
+        std::string ns = group.first;
+
+        if (ns.empty()) {
+            for (const auto& func : group.second) {
+                stream << func << ";\n";
+            }
+        }
+        else {
+            stream << "namespace " << ns << " {\n";
+            for (const auto& func : group.second) {
+                stream << "\t" << func << ";\n";
+            }
+            stream << "}\n";
+        }
+    }
+
+    // 4. Typedefs
+    for (int i = 0; i < engine->GetTypedefCount(); ++i) {
+        const auto type = engine->GetTypedefByIndex(i);
+        if (!type) continue;
+        std::string ns = SafeStr(type->GetNamespace());
+        if (!ns.empty()) stream << "namespace " << ns << " {\n";
+        stream << "typedef " << SafeStr(engine->GetTypeDeclaration(type->GetUnderlyingTypeId(), true)) << " " << SafeStr(type->GetName()) << ";\n";
+        if (!ns.empty()) stream << "}\n";
+    }
+
+    stream.close();
+}
