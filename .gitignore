@@ -12,3 +12,5 @@ msvc
 /msvc_x86
 /fonts
 /build
+/out/build/x64-Debug
+/src/data/icons

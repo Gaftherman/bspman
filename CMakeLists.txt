@@ -85,30 +85,30 @@ set(SOURCE_FILES
 	src/types.h
 	
 	# command line
-	src/cli/CommandLine.h	src/cli/CommandLine.cpp
-	src/cli/ProgressMeter.h	src/cli/ProgressMeter.cpp
+	src/cli/CommandLine.h			src/cli/CommandLine.cpp
+	src/cli/ProgressMeter.h			src/cli/ProgressMeter.cpp
 	
 	# BSP and related structures
-	src/bsp/BspMerger.h		src/bsp/BspMerger.cpp
-	src/bsp/Bsp.h			src/bsp/Bsp.cpp
+	src/bsp/BspMerger.h				src/bsp/BspMerger.cpp
+	src/bsp/Bsp.h					src/bsp/Bsp.cpp
 	src/bsp/bsplimits.h
-	src/bsp/bsptypes.h		src/bsp/bsptypes.cpp
-	src/bsp/Entity.h		src/bsp/Entity.cpp
-	src/bsp/Keyvalue.h		src/bsp/Keyvalue.cpp
-	src/bsp/Wad.h			src/bsp/Wad.cpp
-	src/bsp/remap.h			src/bsp/remap.cpp
-	src/bsp/colors.h		src/bsp/colors.cpp
+	src/bsp/bsptypes.h				src/bsp/bsptypes.cpp
+	src/bsp/Entity.h				src/bsp/Entity.cpp
+	src/bsp/Keyvalue.h				src/bsp/Keyvalue.cpp
+	src/bsp/Wad.h					src/bsp/Wad.cpp
+	src/bsp/remap.h					src/bsp/remap.cpp
+	src/bsp/colors.h				src/bsp/colors.cpp
 	
 	# Math and stuff
-	src/util/util.h				src/util/util.cpp
-	src/util/vectors.h			src/util/vectors.cpp
-	src/util/mat4x4.h			src/util/mat4x4.cpp
-	src/util/Polygon3D.h		src/util/Polygon3D.cpp
-	src/util/Line2D.h			src/util/Line2D.cpp
-	src/util/mstream.h			src/util/mstream.cpp
-	src/util/ThreadSafeInt.h	src/util/ThreadSafeInt.cpp
-	src/util/bmp.h				src/util/bmp.cpp
-	src/globals.h				src/globals.cpp
+	src/util/util.h					src/util/util.cpp
+	src/util/vectors.h				src/util/vectors.cpp
+	src/util/mat4x4.h				src/util/mat4x4.cpp
+	src/util/Polygon3D.h			src/util/Polygon3D.cpp
+	src/util/Line2D.h				src/util/Line2D.cpp
+	src/util/mstream.h				src/util/mstream.cpp
+	src/util/ThreadSafeInt.h		src/util/ThreadSafeInt.cpp
+	src/util/bmp.h					src/util/bmp.cpp
+	src/globals.h					src/globals.cpp
 	
 	# Navigation meshes
 	src/nav/NavMesh.h				src/nav/NavMesh.cpp
@@ -119,11 +119,11 @@ set(SOURCE_FILES
 	src/nav/LeafOctree.h			src/nav/LeafOctree.cpp
 	
 	# OpenGL rendering
-	src/gl/primitives.h			src/gl/primitives.cpp
-	src/gl/Shader.h				src/gl/Shader.cpp
-	src/gl/ShaderProgram.h		src/gl/ShaderProgram.cpp
-	src/gl/VertexBuffer.h		src/gl/VertexBuffer.cpp
-	src/gl/Texture.h			src/gl/Texture.cpp
+	src/gl/primitives.h				src/gl/primitives.cpp
+	src/gl/Shader.h					src/gl/Shader.cpp
+	src/gl/ShaderProgram.h			src/gl/ShaderProgram.cpp
+	src/gl/VertexBuffer.h			src/gl/VertexBuffer.cpp
+	src/gl/Texture.h				src/gl/Texture.cpp
 	src/gl/TextureArray.h			src/gl/TextureArray.cpp
 	
 	# 3D editor
@@ -139,13 +139,18 @@ set(SOURCE_FILES
 	src/editor/SprRenderer.h		src/editor/SprRenderer.cpp
 	src/editor/BaseRenderer.h		src/editor/BaseRenderer.cpp
 	src/editor/TextureAtlas.h		src/editor/TextureAtlas.cpp
-	src/editor/ScriptManager.h		src/editor/ScriptManager.cpp
 	src/editor/studio.h
 	
+	# Scripting
+	src/scripting/ScriptManager.h	src/scripting/ScriptManager.cpp
+	src/scripting/ScriptEntity.h	src/scripting/ScriptEntity.cpp
+	src/scripting/ScriptRGB.h		src/scripting/ScriptRGB.cpp
+	src/scripting/ScriptVector.h	src/scripting/ScriptVector.cpp
+
 	# map compiler code
-	src/qtools/rad.h		src/qtools/rad.cpp
-	src/qtools/vis.h		src/qtools/vis.cpp
-	src/qtools/winding.h	src/qtools/winding.cpp
+	src/qtools/rad.h				src/qtools/rad.cpp
+	src/qtools/vis.h				src/qtools/vis.cpp
+	src/qtools/winding.h			src/qtools/winding.cpp
 	
 	# library files
 	imgui/imgui.cpp
@@ -211,6 +216,7 @@ include_directories(src/qtools)
 include_directories(src/util)
 include_directories(src/nav)
 include_directories(src/lib)
+include_directories(src/scripting)
 include_directories(imgui)
 include_directories(imgui/examples)
 include_directories(imgui/backends)
@@ -381,55 +387,79 @@ if(MSVC)
 													imgui/backends/imgui_impl_glfw.cpp
 													imgui/backends/imgui_impl_opengl2.cpp
 													src/util/lodepng.cpp)
-	
+
+	source_group("Header Files\\scripting" FILES    src/scripting/ScriptManager.h
+                                                    src/scripting/ScriptEntity.h
+                                                    src/scripting/ScriptRGB.h
+                                                    src/scripting/ScriptVector.h)
+                                                
+    source_group("Source Files\\scripting" FILES    src/scripting/ScriptManager.cpp
+                                                    src/scripting/ScriptEntity.cpp
+                                                    src/scripting/ScriptRGB.cpp
+                                                    src/scripting/ScriptVector.cpp)
+
 	# AngelScript add-ons source groups
 	source_group("Source Files\\angelscript\\contextmgr" FILES
 													angelscript/sdk/add_on/contextmgr/contextmgr.cpp
 													angelscript/sdk/add_on/contextmgr/contextmgr.h)
+													
 	source_group("Source Files\\angelscript\\datetime" FILES
 													angelscript/sdk/add_on/datetime/datetime.cpp
 													angelscript/sdk/add_on/datetime/datetime.h)
+
 	source_group("Source Files\\angelscript\\debugger" FILES
 													angelscript/sdk/add_on/debugger/debugger.cpp
 													angelscript/sdk/add_on/debugger/debugger.h)
+
 	source_group("Source Files\\angelscript\\scriptany" FILES
 													angelscript/sdk/add_on/scriptany/scriptany.cpp
 													angelscript/sdk/add_on/scriptany/scriptany.h)
+
 	source_group("Source Files\\angelscript\\scriptarray" FILES
 													angelscript/sdk/add_on/scriptarray/scriptarray.cpp
 													angelscript/sdk/add_on/scriptarray/scriptarray.h)
+
 	source_group("Source Files\\angelscript\\scriptbuilder" FILES
 													angelscript/sdk/add_on/scriptbuilder/scriptbuilder.cpp
 													angelscript/sdk/add_on/scriptbuilder/scriptbuilder.h)
+
 	source_group("Source Files\\angelscript\\scriptdictionary" FILES
 													angelscript/sdk/add_on/scriptdictionary/scriptdictionary.cpp
 													angelscript/sdk/add_on/scriptdictionary/scriptdictionary.h)
+
 	source_group("Source Files\\angelscript\\scriptfile" FILES
 													angelscript/sdk/add_on/scriptfile/scriptfile.cpp
 													angelscript/sdk/add_on/scriptfile/scriptfile.h
 													angelscript/sdk/add_on/scriptfile/scriptfilesystem.cpp
 													angelscript/sdk/add_on/scriptfile/scriptfilesystem.h)
+
 	source_group("Source Files\\angelscript\\scriptgrid" FILES
 													angelscript/sdk/add_on/scriptgrid/scriptgrid.cpp
 													angelscript/sdk/add_on/scriptgrid/scriptgrid.h)
+
 	source_group("Source Files\\angelscript\\scripthandle" FILES
 													angelscript/sdk/add_on/scripthandle/scripthandle.cpp
 													angelscript/sdk/add_on/scripthandle/scripthandle.h)
+
 	source_group("Source Files\\angelscript\\scripthelper" FILES
 													angelscript/sdk/add_on/scripthelper/scripthelper.cpp
 													angelscript/sdk/add_on/scripthelper/scripthelper.h)
+
 	source_group("Source Files\\angelscript\\scriptmath" FILES
 													angelscript/sdk/add_on/scriptmath/scriptmath.cpp
 													angelscript/sdk/add_on/scriptmath/scriptmath.h
 													angelscript/sdk/add_on/scriptmath/scriptmathcomplex.cpp
 													angelscript/sdk/add_on/scriptmath/scriptmathcomplex.h)
+
 	source_group("Source Files\\angelscript\\scriptstdstring" FILES
 													angelscript/sdk/add_on/scriptstdstring/scriptstdstring.cpp
 													angelscript/sdk/add_on/scriptstdstring/scriptstdstring.h
 													angelscript/sdk/add_on/scriptstdstring/scriptstdstring_utils.cpp)
+
 	source_group("Source Files\\angelscript\\serializer" FILES
 													angelscript/sdk/add_on/serializer/serializer.cpp
 													angelscript/sdk/add_on/serializer/serializer.h)
+
 	source_group("Source Files\\angelscript\\weakref" FILES
 													angelscript/sdk/add_on/weakref/weakref.cpp
 													angelscript/sdk/add_on/weakref/weakref.h)
